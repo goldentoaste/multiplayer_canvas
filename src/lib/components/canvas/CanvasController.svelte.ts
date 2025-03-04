@@ -1,5 +1,8 @@
 import { Vector2 } from "$lib/Vector2";
 
+export interface SerializedLineType {
+    id: string, thickness: number, color: string, points: [number, number][]
+}
 class Line {
     id: string;
     thickness: number; // in px
@@ -48,6 +51,21 @@ class Line {
 
     pointsCulling(maxPoints: number, epsilon: number) {
         // TODO cull points within epsilon of each other so until total points is less than max
+    }
+
+    serialize() {
+        return {
+            id: this.id,
+            thickness: this.thickness,
+            color: this.color,
+            points: this.points.map(item => item.toArr())
+        }
+    }
+
+    static deserialize(obj: SerializedLineType) {
+        return new Line(
+            obj.id, obj.thickness, obj.color, obj.points.map(item => Vector2.fromArr(item))
+        );
     }
 }
 
@@ -140,19 +158,19 @@ export class CanvasController {
         line.render(ctx);
     }
 
-    renderStatic(){
-        if(!this.needStaticRender){
+    renderStatic() {
+        if (!this.needStaticRender) {
             return;
         }
         const translated = Vector2.ZERO.addp(CANVAS_WIDTH, CANVAS_HEIGHT).add(this.cameraPos);
 
-        const data =  this.ctxHeadless.getImageData(translated.x, translated.y, this.staticCanvas.width, this.staticCanvas.height);
+        const data = this.ctxHeadless.getImageData(translated.x, translated.y, this.staticCanvas.width, this.staticCanvas.height);
         this.ctxStatic.putImageData(data, 0, 0); // transfer a section to display
     }
 
 
-    renderDynamic(){
-        if(!this.needDynamicRender){
+    renderDynamic() {
+        if (!this.needDynamicRender) {
             return;
         }
 
@@ -160,14 +178,14 @@ export class CanvasController {
         ctx.resetTransform();
         ctx.translate(-this.cameraPos.x, -this.cameraPos.y);
 
-        for(const line of this.dynamicLines){
+        for (const line of this.dynamicLines) {
             line.render(ctx);
         }
     }
 
-    
 
-    async createCursor(){
+
+    async createCursor() {
         // TODO
     }
 

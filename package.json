@@ -19,5 +19,9 @@
 		"svelte-check": "^4.0.0",
 		"typescript": "^5.0.0",
 		"vite": "^6.0.0"
+	},
+	"dependencies": {
+		"@ably/spaces": "^0.4.0",
+		"ably": "^2.6.3"
 	}
 }

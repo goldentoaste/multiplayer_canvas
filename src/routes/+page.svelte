@@ -1,7 +1,8 @@
 
 
 <script lang="ts">
-  import { onMount } from "svelte";
+    import MultiplayerCanvas from "$lib/components/canvas/MultiplayerCanvas.svelte";
+    import { onMount } from "svelte";
 
     
 
@@ -25,6 +26,11 @@
 
 <h1>Canvas!</h1>
 <label for="name">Enter your name to continue: <input id="name" type="text" bind:value="{username}"/></label>
+
+
+<MultiplayerCanvas size={{width:500, height:500}}/>
+
+
 <style>
     
 </style>
