@@ -80,12 +80,5 @@
         pointer-events: none;
     }
 
-    .block {
-        position: absolute;
-        left: var(--x);
-        top: var(--y);
-        background-color: var(--color);
-        width: 1rem;
-        height: 1rem;
-    }
+
 </style>
