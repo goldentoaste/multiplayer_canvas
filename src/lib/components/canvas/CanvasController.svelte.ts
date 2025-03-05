@@ -1,4 +1,7 @@
+import { joinSpace } from "$lib/realtime/space.svelte";
 import { Vector2 } from "$lib/Vector2";
+import type { CursorData, CursorUpdate } from "@ably/spaces";
+import { untrack } from "svelte";
 
 export interface SerializedLineType {
     id: string, thickness: number, color: string, points: [number, number][]
@@ -59,7 +62,7 @@ class Line {
             thickness: this.thickness,
             color: this.color,
             points: this.points.map(item => item.toArr())
-        }
+        } as SerializedLineType
     }
 
     static deserialize(obj: SerializedLineType) {
@@ -73,11 +76,17 @@ class Line {
  * While CanvasController tracks cursor locations, it does not render.
  * Cursors should be a SVelte component instead.
  */
-export interface Cursor {
-    id: string;
-    username: string; // need not be unique
-    color: string;
-    pos: Vector2;
+export class Cursor {
+    id: string = $state("");
+    username: string | undefined = $state();
+    color: string = $state("");
+    pos: Vector2 = $state.raw(Vector2.ZERO);
+    constructor(id: string, color: string, username: string | undefined, pos: Vector2) {
+        this.id = id;
+        this.username = username;
+        this.color = color;
+        this.pos = pos;
+    }
 }
 
 // max size of the offscreen canvas, from origin to edge
@@ -95,7 +104,7 @@ export class CanvasController {
     cameraZoom: number = 1;
 
     staticLines: Line[]; // lines that is already drawn, to be rendered on initial load, into canvas buffer
-    dynamicLines: Line[]; // lines that is currently drawing, to be transfered to staticLines and render to buffer when done.
+    dynamicLines: { [userId: string]: Line }; // lines that is currently drawing, to be transfered to staticLines and render to buffer when done.
 
     ctxStatic: CanvasRenderingContext2D;
     ctxDynamic: CanvasRenderingContext2D;
@@ -104,12 +113,18 @@ export class CanvasController {
     needDynamicRender = false; // boolean flag to indicate if either needs rerendering
 
     selfCursor: Cursor | undefined = $state(undefined); // Cursor is a primitive obj, so should be deeply reactive by Svelte
-    othersCuror: Cursor[] = $state([]);
+    othersCursors: { [clientId: string]: Cursor } = $state({});
 
     headlessCanvas: OffscreenCanvas; // canvas buffer to store the entire canvas, "staticCanvas" just shows a part of this one.
     ctxHeadless: OffscreenCanvasRenderingContext2D;
 
+    space: Awaited<ReturnType<typeof joinSpace>> | undefined = $state();
+    username: string | undefined = $state();
+    currentLine: Line | undefined;
 
+    lastFrameTime: number = 0;
+    deltaTime: number = 0;
+    cursorUpdateThreshold = 50; // 100ms for each web cursor update
 
 
     constructor(staticCanvas: HTMLCanvasElement, dynamicCanvas: HTMLCanvasElement) {
@@ -119,14 +134,138 @@ export class CanvasController {
         this.cameraPos = Vector2.ZERO;
 
         this.staticLines = [];
-        this.dynamicLines = []; // TODO, fetch from db
+        this.dynamicLines = {}; // TODO, fetch from db
 
         this.ctxStatic = this.staticCanvas.getContext("2d")!;
         this.ctxDynamic = this.dynamicCanvas.getContext("2d")!;
 
         this.headlessCanvas = new OffscreenCanvas(CANVAS_WIDTH * 2, CANVAS_HEIGHT * 2);
         this.ctxHeadless = this.headlessCanvas.getContext("2d")!;
+
+
+
+
+        $effect(() => {
+
+            if (this.space && this.username) {
+                this.space.updateProfile(this.username);
+            }
+
+            if (this.space && this.selfCursor) {
+                untrack(() => {
+                    this.selfCursor!.username = this.username;
+                })
+
+            }
+        })
+
+        this.initEvents();
+        this.startRealTime();
+        this.startRender();
     }
+
+    // ============ Render loop ============
+    startRender() {
+        requestAnimationFrame(this.render.bind(this));
+    }
+
+    render() {
+        this.updateDeltaTime();
+
+        // do things
+        requestAnimationFrame(this.render.bind(this))
+    }
+
+    updateDeltaTime() {
+        const currentTime = new Date().getTime();
+        this.deltaTime = currentTime - this.lastFrameTime;
+        if (this.deltaTime > this.cursorUpdateThreshold) {
+            this.lastFrameTime = currentTime;
+        }
+    }
+
+
+    // ============ End Render loop ============
+
+
+
+
+    // ============ events ============
+
+    handleCursorUpdate(e: CursorUpdate) {
+        if (!e.data) {
+            return;
+        }
+
+        const user = e.data.user as { id: string, username: string, color: string };
+        const currentLine = e.data.currentLine as SerializedLineType | undefined;
+
+        this.othersCursors[user.id] = {
+            ...user,
+            pos: new Vector2(e.position.x, e.position.y).sub(this.cameraPos)
+        }
+
+        this.othersCursors = this.othersCursors;
+
+        if (currentLine) {
+            this.dynamicLines[user.id] = Line.deserialize(currentLine);
+        }
+
+        if (!currentLine && this.dynamicLines[user.id]) {
+            this.needStaticRender = true;
+            this.renderHeadlessLine(this.dynamicLines[user.id]);
+            delete this.dynamicLines[user.id];
+        }
+
+    }
+
+    startRealTime() {
+        joinSpace(undefined,
+            (e) => {
+                this.handleCursorUpdate(e);
+            }
+        ).then((space) => {
+            this.space = space;
+            this.selfCursor = new Cursor(this.space.user.id,
+                this.space.user.color,
+                undefined,
+                Vector2.ZERO)
+        })
+
+
+    }
+
+    initEvents() {
+        this.dynamicCanvas.addEventListener("mousemove", (e) => {
+
+            if (e.buttons === 0) {
+                this.mouseHover(e);
+            }
+        })
+    }
+
+    mouseHover(e: MouseEvent) {
+
+        if (!this.space || !this.selfCursor) {
+            return;
+        }
+
+
+        this.selfCursor.pos = new Vector2(e.offsetX, e.offsetY);
+
+        if (this.deltaTime > this.cursorUpdateThreshold) {
+            this.space.updateCursor(e.offsetX, e.offsetY, {
+                username: this.username,
+                color: this.selfCursor.color,
+                id: this.selfCursor.id
+            }, this.currentLine?.serialize());
+        }
+
+    }
+
+
+
+    // ============ end events ============
 
 
     /**
@@ -168,7 +307,6 @@ export class CanvasController {
         this.ctxStatic.putImageData(data, 0, 0); // transfer a section to display
     }
 
-
     renderDynamic() {
         if (!this.needDynamicRender) {
             return;
@@ -178,18 +316,13 @@ export class CanvasController {
         ctx.resetTransform();
         ctx.translate(-this.cameraPos.x, -this.cameraPos.y);
 
-        for (const line of this.dynamicLines) {
+        for (const line of Object.values(this.dynamicLines)) {
             line.render(ctx);
         }
     }
 
-
-
-    async createCursor() {
-        // TODO
+    cleanup(){
+        this.space?.unsubscribe();
     }
-
-
-
 
 }
