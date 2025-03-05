@@ -124,7 +124,7 @@ export class CanvasController {
 
     lastFrameTime: number = 0;
     deltaTime: number = 0;
-    cursorUpdateThreshold = 50; // 100ms for each web cursor update
+    cursorUpdateThreshold = 45; // 100ms for each web cursor update
 
 
     constructor(staticCanvas: HTMLCanvasElement, dynamicCanvas: HTMLCanvasElement) {
@@ -205,7 +205,7 @@ export class CanvasController {
 
         this.othersCursors[user.id] = {
             ...user,
-            pos: new Vector2(e.position.x, e.position.y).sub(this.cameraPos)
+            pos: new Vector2(e.position.x, e.position.y).add(this.cameraPos)
         }
 
         this.othersCursors = this.othersCursors;
@@ -219,6 +219,8 @@ export class CanvasController {
             this.renderHeadlessLine(this.dynamicLines[user.id]);
             delete this.dynamicLines[user.id];
         }
+
+        this.needDynamicRender = true;
 
     }
 
@@ -248,10 +250,12 @@ export class CanvasController {
             }
             else if (e.buttons === 1) {
                 this.mouseDrag(e);
+            } else if (e.buttons === 4) {
+                this.mousepan(e)
             }
         })
 
-        this.dynamicCanvas.addEventListener("mouseup", (e)=>{
+        this.dynamicCanvas.addEventListener("mouseup", (e) => {
             this.mouseup();
         })
     }
@@ -270,7 +274,22 @@ export class CanvasController {
         }
     }
 
-    mouseup(){
+    mousepan(e: MouseEvent) {
+        const diff = new Vector2(e.movementX, e.movementY);
+        this.cameraPos = this.cameraPos.sub(diff);
+
+        if(this.selfCursor){
+
+            this.selfCursor.pos = this.selfCursor?.pos.add(diff);
+        }
+        Object.values(this.othersCursors).forEach(item => item.pos = item.pos.add(diff));
+
+
+        this.needDynamicRender = true;
+        this.needStaticRender = true;
+    }
+
+    mouseup() {
         this.currentLine = undefined;
         // TODO upload results
     }
@@ -301,7 +320,7 @@ export class CanvasController {
         this.needDynamicRender = true;
 
         console.log(this.currentLine);
-        
+
 
         this.uploadCursorInfo(e);
 
@@ -351,6 +370,8 @@ export class CanvasController {
 
         const data = this.ctxHeadless.getImageData(translated.x, translated.y, this.staticCanvas.width, this.staticCanvas.height);
         this.ctxStatic.putImageData(data, 0, 0); // transfer a section to display
+
+        this.needStaticRender = false;
     }
 
     renderDynamic() {
@@ -359,12 +380,15 @@ export class CanvasController {
         }
 
         const ctx = this.ctxDynamic;
+        ctx.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height)
         ctx.resetTransform();
         ctx.translate(-this.cameraPos.x, -this.cameraPos.y);
 
         for (const line of Object.values(this.dynamicLines)) {
             line.render(ctx);
         }
+
+        this.needDynamicRender = false;
     }
 
     cleanup() {
