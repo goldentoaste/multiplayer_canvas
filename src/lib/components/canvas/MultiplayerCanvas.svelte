@@ -43,8 +43,8 @@
     class="canvasContainer"
     style={`${style ?? ""} ${size ? `width: ${size.width}px; height: ${size.height}px;` : ""}`}
 >
-    <canvas bind:this={staticCanvas} class="staticCanvas"></canvas>
-    <canvas bind:this={dynamicCanvas} class="dynamicCanvas"></canvas>
+    <canvas bind:this={staticCanvas} class="staticCanvas" width="{size?.width }px" height="{size?.height}"></canvas>
+    <canvas bind:this={dynamicCanvas} class="dynamicCanvas" width="{size?.width }px" height="{size?.height}"></canvas>
     <div class="cursorContainer">
         {#if canvasController}
             {#each Object.values(canvasController.othersCursors) as cursor, _ (cursor.id)}
@@ -54,7 +54,7 @@
         {/if}
         {#if canvasController?.selfCursor}
 
-            <UserCursor {...canvasController.selfCursor} />
+            <UserCursor {...canvasController.selfCursor} instant />
         {/if}
     </div>
 </div>

@@ -18,9 +18,9 @@
             x: pos.x,
             y:pos.y
         },
-        {
+        instant? {stiffness:0.4, damping:0.9}:{
             stiffness: 0.1,
-            damping: 0.6,
+            damping: 0.65,
         },
     );
 

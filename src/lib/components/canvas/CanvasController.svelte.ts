@@ -172,6 +172,9 @@ export class CanvasController {
     render() {
         this.updateDeltaTime();
 
+
+        this.renderDynamic();
+        this.renderStatic();
         // do things
         requestAnimationFrame(this.render.bind(this))
     }
@@ -219,6 +222,8 @@ export class CanvasController {
 
     }
 
+
+
     startRealTime() {
         joinSpace(undefined,
             (e) => {
@@ -241,17 +246,20 @@ export class CanvasController {
             if (e.buttons === 0) {
                 this.mouseHover(e);
             }
+            else if (e.buttons === 1) {
+                this.mouseDrag(e);
+            }
+        })
+
+        this.dynamicCanvas.addEventListener("mouseup", (e)=>{
+            this.mouseup();
         })
     }
 
-    mouseHover(e: MouseEvent) {
-
+    uploadCursorInfo(e: MouseEvent) {
         if (!this.space || !this.selfCursor) {
             return;
         }
-
-
-        this.selfCursor.pos = new Vector2(e.offsetX, e.offsetY);
 
         if (this.deltaTime > this.cursorUpdateThreshold) {
             this.space.updateCursor(e.offsetX, e.offsetY, {
@@ -260,6 +268,44 @@ export class CanvasController {
                 id: this.selfCursor.id
             }, this.currentLine?.serialize());
         }
+    }
+
+    mouseup(){
+        this.currentLine = undefined;
+        // TODO upload results
+    }
+
+    mouseHover(e: MouseEvent) {
+
+
+        if (this.selfCursor)
+            this.selfCursor.pos = new Vector2(e.offsetX, e.offsetY);
+        this.uploadCursorInfo(e)
+
+
+    }
+
+    mouseDrag(e: MouseEvent) {
+        // TODO color and thickness modifier
+
+        if (!this.currentLine) {
+            this.currentLine = new Line(crypto.randomUUID(), 4, "black", []);
+        }
+
+        if (this.selfCursor)
+            this.selfCursor.pos = new Vector2(e.offsetX, e.offsetY);
+
+
+        this.currentLine.appendPoint(new Vector2(e.offsetX, e.offsetY).add(this.cameraPos));
+        this.dynamicLines[this.currentLine.id] = this.currentLine;
+        this.needDynamicRender = true;
+
+        console.log(this.currentLine);
+        
+
+        this.uploadCursorInfo(e);
+
+
 
     }
 
@@ -321,7 +367,7 @@ export class CanvasController {
         }
     }
 
-    cleanup(){
+    cleanup() {
         this.space?.unsubscribe();
     }
 
