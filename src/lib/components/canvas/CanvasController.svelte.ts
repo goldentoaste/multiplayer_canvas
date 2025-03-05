@@ -284,7 +284,6 @@ export class CanvasController {
         }
         Object.values(this.othersCursors).forEach(item => item.pos = item.pos.add(diff));
 
-
         this.needDynamicRender = true;
         this.needStaticRender = true;
     }
@@ -295,8 +294,6 @@ export class CanvasController {
     }
 
     mouseHover(e: MouseEvent) {
-
-
         if (this.selfCursor)
             this.selfCursor.pos = new Vector2(e.offsetX, e.offsetY);
         this.uploadCursorInfo(e)
@@ -380,8 +377,8 @@ export class CanvasController {
         }
 
         const ctx = this.ctxDynamic;
-        ctx.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height)
         ctx.resetTransform();
+        ctx.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height)
         ctx.translate(-this.cameraPos.x, -this.cameraPos.y);
 
         for (const line of Object.values(this.dynamicLines)) {
