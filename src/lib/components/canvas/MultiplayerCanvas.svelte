@@ -24,8 +24,6 @@
     $effect(() => {
         if (canvasController && username) {
             canvasController.username = username;
-            console.log("updating user name");
-            
         }
     });
 
@@ -38,7 +36,9 @@
  
 </script>
 
-
+<span>Delete mode: {canvasController?.deleteMode}</span> <button onclick="{()=>{
+    canvasController && (canvasController.deleteMode = !canvasController.deleteMode)
+}}">toggle delete</button>
 <div
     class="canvasContainer"
     style={`${style ?? ""} ${size ? `width: ${size.width}px; height: ${size.height}px;` : ""}`}
@@ -64,6 +64,7 @@
         position: relative;
         border: 2px solid red;
         cursor: none;
+        overflow: hidden;
     }
 
     .staticCanvas,
@@ -79,6 +80,8 @@
     .cursorContainer {
         pointer-events: none;
     }
+
+
 
 
 </style>

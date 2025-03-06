@@ -1,5 +1,5 @@
 import { joinSpace } from "$lib/realtime/space.svelte";
-import { Vector2 } from "$lib/Vector2";
+import { AABB, Vector2 } from "$lib/Vector2";
 import type { CursorData, CursorUpdate } from "@ably/spaces";
 import { untrack } from "svelte";
 
@@ -11,7 +11,7 @@ class Line {
     thickness: number; // in px
     color: string; // html color name or hex
     points: Vector2[];
-
+    aabb: AABB | undefined = undefined;
     constructor(id: string, thickness: number, color: string, points: Vector2[]) {
         this.id = id;
         this.thickness = thickness;
@@ -41,6 +41,7 @@ class Line {
         ctx.strokeStyle = this.color;
         ctx.lineWidth = this.thickness;
         ctx.lineCap = "round";
+        ctx.lineJoin = 'round'
 
         ctx.beginPath();
         ctx.moveTo(this.points[0].x, this.points[0].y);
@@ -52,8 +53,37 @@ class Line {
         ctx.stroke(); // done!
     }
 
-    pointsCulling(maxPoints: number, epsilon: number) {
-        // TODO cull points within epsilon of each other so until total points is less than max
+
+    /**
+     * remove points that are epsilon within each other
+     * @param epsilon 
+     */
+    pointsCulling(epsilon: number, smoothRange: number) {
+        for (let i = this.points.length - 1; i > 0; i--) {
+            if (this.points[i].sub(this.points[i - 1]).mag() < epsilon) {
+                this.points.splice(i, 1);
+                i--; // skip the next point
+            }
+        }
+
+        // construct the aabb during smoothing
+        this.aabb = new AABB(this.points[0].clone(), this.points[0].clone());
+
+
+        // smooth the remaining points
+        for (let i = 0; i < this.points.length; i++) {
+            let sum = Vector2.ZERO;
+
+            const start = Math.max(0, i - smoothRange);
+            const end = Math.min(i + smoothRange, this.points.length);
+
+            for (let j = start; j < end; j++) {
+                sum.addi(this.points[j]);
+            }
+
+            this.points[i] = sum.mul(1 / (end - start));
+            this.aabb.expandToContain(this.points[i]);
+        }
     }
 
     serialize() {
@@ -70,6 +100,16 @@ class Line {
             obj.id, obj.thickness, obj.color, obj.points.map(item => Vector2.fromArr(item))
         );
     }
+
+    makeAABB() {
+        this.aabb = new AABB(this.points[0].clone(), this.points[0].clone());
+
+        for (const p of this.points) {
+            this.aabb.expandToContain(p);
+        }
+    }
+
+    
 }
 
 /**
@@ -104,7 +144,7 @@ export class CanvasController {
     cameraZoom: number = 1;
 
     staticLines: Line[]; // lines that is already drawn, to be rendered on initial load, into canvas buffer
-    dynamicLines: { [userId: string]: Line }; // lines that is currently drawing, to be transfered to staticLines and render to buffer when done.
+    dynamicLines: Map<string, Line>; // lines that is currently drawing, to be transfered to staticLines and render to buffer when done.
 
     ctxStatic: CanvasRenderingContext2D;
     ctxDynamic: CanvasRenderingContext2D;
@@ -115,8 +155,6 @@ export class CanvasController {
     selfCursor: Cursor | undefined = $state(undefined); // Cursor is a primitive obj, so should be deeply reactive by Svelte
     othersCursors: { [clientId: string]: Cursor } = $state({});
 
-    headlessCanvas: OffscreenCanvas; // canvas buffer to store the entire canvas, "staticCanvas" just shows a part of this one.
-    ctxHeadless: OffscreenCanvasRenderingContext2D;
 
     space: Awaited<ReturnType<typeof joinSpace>> | undefined = $state();
     username: string | undefined = $state();
@@ -126,6 +164,8 @@ export class CanvasController {
     deltaTime: number = 0;
     cursorUpdateThreshold = 45; // 100ms for each web cursor update
 
+    deleteMode = $state(false);
+
 
     constructor(staticCanvas: HTMLCanvasElement, dynamicCanvas: HTMLCanvasElement) {
         this.staticCanvas = staticCanvas;
@@ -134,16 +174,10 @@ export class CanvasController {
         this.cameraPos = Vector2.ZERO;
 
         this.staticLines = [];
-        this.dynamicLines = {}; // TODO, fetch from db
+        this.dynamicLines = new Map(); // TODO, fetch from db
 
         this.ctxStatic = this.staticCanvas.getContext("2d")!;
         this.ctxDynamic = this.dynamicCanvas.getContext("2d")!;
-
-        this.headlessCanvas = new OffscreenCanvas(CANVAS_WIDTH * 2, CANVAS_HEIGHT * 2);
-        this.ctxHeadless = this.headlessCanvas.getContext("2d")!;
-
-
-
 
         $effect(() => {
 
@@ -201,6 +235,10 @@ export class CanvasController {
         }
 
         const user = e.data.user as { id: string, username: string, color: string };
+        if (user.id === this.selfCursor?.id) {
+            return; // ignore own data to avoid overhead
+        }
+
         const currentLine = e.data.currentLine as SerializedLineType | undefined;
 
         this.othersCursors[user.id] = {
@@ -211,13 +249,15 @@ export class CanvasController {
         this.othersCursors = this.othersCursors;
 
         if (currentLine) {
-            this.dynamicLines[user.id] = Line.deserialize(currentLine);
+            this.dynamicLines.set(user.id, Line.deserialize(currentLine));
         }
 
-        if (!currentLine && this.dynamicLines[user.id]) {
+        if (!currentLine && this.dynamicLines.has(user.id)) {
             this.needStaticRender = true;
-            this.renderHeadlessLine(this.dynamicLines[user.id]);
-            delete this.dynamicLines[user.id];
+            const line = this.dynamicLines.get(user.id)!;
+            line.makeAABB(); //jank
+            this.staticLines.push(line);
+            this.dynamicLines.delete(user.id);
         }
 
         this.needDynamicRender = true;
@@ -256,7 +296,7 @@ export class CanvasController {
         })
 
         this.dynamicCanvas.addEventListener("mouseup", (e) => {
-            this.mouseup();
+            this.mouseup(e);
         })
     }
 
@@ -266,7 +306,7 @@ export class CanvasController {
         }
 
         if (this.deltaTime > this.cursorUpdateThreshold) {
-            this.space.updateCursor(e.offsetX, e.offsetY, {
+            this.space.updateCursor(e.offsetX + this.cameraPos.x, e.offsetY + this.cameraPos.y, {
                 username: this.username,
                 color: this.selfCursor.color,
                 id: this.selfCursor.id
@@ -278,7 +318,7 @@ export class CanvasController {
         const diff = new Vector2(e.movementX, e.movementY);
         this.cameraPos = this.cameraPos.sub(diff);
 
-        if(this.selfCursor){
+        if (this.selfCursor) {
 
             this.selfCursor.pos = this.selfCursor?.pos.add(diff);
         }
@@ -288,17 +328,30 @@ export class CanvasController {
         this.needStaticRender = true;
     }
 
-    mouseup() {
+    mouseup(e: MouseEvent) {
+        if (!this.currentLine) {
+            return;
+        }
+
+        // smooth n reduce
+        this.currentLine.pointsCulling(0.5, 1);
+
+        this.staticLines.push(this.currentLine);
+        this.dynamicLines.delete(this.currentLine.id);
+        // broadcast the smoothed version
+        this.uploadCursorInfo(e);
+
+
         this.currentLine = undefined;
-        // TODO upload results
+        this.needStaticRender = true;
+        this.needDynamicRender = true;
+        // TODO upload results to perm storage
     }
 
     mouseHover(e: MouseEvent) {
         if (this.selfCursor)
             this.selfCursor.pos = new Vector2(e.offsetX, e.offsetY);
-        this.uploadCursorInfo(e)
-
-
+        this.uploadCursorInfo(e);
     }
 
     mouseDrag(e: MouseEvent) {
@@ -313,15 +366,10 @@ export class CanvasController {
 
 
         this.currentLine.appendPoint(new Vector2(e.offsetX, e.offsetY).add(this.cameraPos));
-        this.dynamicLines[this.currentLine.id] = this.currentLine;
+        this.dynamicLines.set(this.currentLine.id, this.currentLine);
         this.needDynamicRender = true;
 
-        console.log(this.currentLine);
-
-
         this.uploadCursorInfo(e);
-
-
 
     }
 
@@ -330,43 +378,20 @@ export class CanvasController {
     // ============ end events ============
 
 
-    /**
-     * re-render the entire global headless canvas.
-     * Should be used sparingly
-     */
-    renderHeadlessAll() {
-        const ctx = this.ctxHeadless;
-
-        ctx.resetTransform();
-        ctx.clearRect(0, 0, CANVAS_WIDTH * 2, CANVAS_HEIGHT * 2);
-        ctx.translate(CANVAS_WIDTH, CANVAS_HEIGHT); // translate to center of the headless canvas, the world origin
-
-        for (const line of this.staticLines) {
-            line.render(ctx);
-        }
-    }
-
-
-    /**
-     * only render a single line into the headless buffer
-     * @param line 
-     */
-    renderHeadlessLine(line: Line) {
-        const ctx = this.ctxHeadless;
-        ctx.resetTransform();
-        ctx.translate(CANVAS_WIDTH, CANVAS_HEIGHT); // translate to center of the headless canvas, the world origin
-
-        line.render(ctx);
-    }
 
     renderStatic() {
         if (!this.needStaticRender) {
             return;
         }
-        const translated = Vector2.ZERO.addp(CANVAS_WIDTH, CANVAS_HEIGHT).add(this.cameraPos);
 
-        const data = this.ctxHeadless.getImageData(translated.x, translated.y, this.staticCanvas.width, this.staticCanvas.height);
-        this.ctxStatic.putImageData(data, 0, 0); // transfer a section to display
+        const ctx = this.ctxStatic;
+        ctx.resetTransform();
+        ctx.clearRect(0, 0, this.staticCanvas.width, this.staticCanvas.height)
+        ctx.translate(-this.cameraPos.x, -this.cameraPos.y);
+
+        for (const line of Object.values(this.staticLines)) {
+            line.render(ctx);
+        }
 
         this.needStaticRender = false;
     }
@@ -381,8 +406,10 @@ export class CanvasController {
         ctx.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height)
         ctx.translate(-this.cameraPos.x, -this.cameraPos.y);
 
-        for (const line of Object.values(this.dynamicLines)) {
+
+        for (const line of this.dynamicLines.values()) {
             line.render(ctx);
+
         }
 
         this.needDynamicRender = false;

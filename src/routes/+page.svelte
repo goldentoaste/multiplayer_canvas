@@ -2,7 +2,6 @@
 
 <script lang="ts">
     import MultiplayerCanvas from "$lib/components/canvas/MultiplayerCanvas.svelte";
-    import SanityTest from "$lib/components/canvas/SanityTest.svelte";
     import { onMount } from "svelte";
 
     
@@ -29,8 +28,7 @@
 <label for="name">Enter your name to continue: <input id="name" type="text" bind:value="{username}"/></label>
 
 
-<MultiplayerCanvas size={{width:500, height:500}} {username}/>
-<!-- <SanityTest></SanityTest> -->
+<MultiplayerCanvas size={{width:800, height:600}} {username}/>
 
 <style>
     
