@@ -243,7 +243,7 @@ export class CanvasController {
 
         this.othersCursors[user.id] = {
             ...user,
-            pos: new Vector2(e.position.x, e.position.y).add(this.cameraPos)
+            pos: new Vector2(e.position.x, e.position.y).sub(this.cameraPos)
         }
 
         this.othersCursors = this.othersCursors;
@@ -300,12 +300,12 @@ export class CanvasController {
         })
     }
 
-    uploadCursorInfo(e: MouseEvent) {
+    uploadCursorInfo(e: MouseEvent, force=false) {
         if (!this.space || !this.selfCursor) {
             return;
         }
 
-        if (this.deltaTime > this.cursorUpdateThreshold) {
+        if ( force || this.deltaTime > this.cursorUpdateThreshold) {
             this.space.updateCursor(e.offsetX + this.cameraPos.x, e.offsetY + this.cameraPos.y, {
                 username: this.username,
                 color: this.selfCursor.color,
@@ -335,11 +335,10 @@ export class CanvasController {
 
         // smooth n reduce
         this.currentLine.pointsCulling(0.5, 1);
-
         this.staticLines.push(this.currentLine);
         this.dynamicLines.delete(this.currentLine.id);
         // broadcast the smoothed version
-        this.uploadCursorInfo(e);
+        this.uploadCursorInfo(e, true);
 
 
         this.currentLine = undefined;
