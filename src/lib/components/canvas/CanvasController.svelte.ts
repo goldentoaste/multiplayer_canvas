@@ -109,7 +109,7 @@ class Line {
         }
     }
 
-    
+
 }
 
 /**
@@ -129,10 +129,15 @@ export class Cursor {
     }
 }
 
-// max size of the offscreen canvas, from origin to edge
-// the realsize is doubled (+/- directions)
-const CANVAS_WIDTH = 4000;
-const CANVAS_HEIGHT = 4000;
+interface SimplePointerEvent {
+    x: number;
+    y: number;
+
+    dx: number;
+    dy: number;
+
+    buttons: number;
+}
 
 
 export class CanvasController {
@@ -284,29 +289,115 @@ export class CanvasController {
 
     initEvents() {
         this.dynamicCanvas.addEventListener("mousemove", (e) => {
+            const event: SimplePointerEvent = {
+                x: e.offsetX,
+                y: e.offsetY,
 
+                dx: e.movementX,
+                dy: e.movementY,
+
+                buttons: e.buttons
+            }
             if (e.buttons === 0) {
-                this.mouseHover(e);
+                this.mouseHover(event);
             }
             else if (e.buttons === 1) {
-                this.mouseDrag(e);
+                this.mouseDrag(event);
             } else if (e.buttons === 4) {
-                this.mousepan(e)
+                this.mousepan(event)
             }
         })
 
         this.dynamicCanvas.addEventListener("mouseup", (e) => {
-            this.mouseup(e);
+            const event: SimplePointerEvent = {
+                x: e.offsetX,
+                y: e.offsetY,
+
+                dx: e.movementX,
+                dy: e.movementY,
+
+                buttons: e.buttons
+            }
+            this.mouseup(event);
+        });
+
+
+
+        // touch related
+        this.dynamicCanvas.addEventListener("touchstart", (e)=>{
+            if(e.touches.length == 1){
+                const t = e.touches[0];
+                const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+                this.lastX = t.clientX - rect.left;
+                this.lastY = t.clientY - rect.top;
+            }
+        })
+
+
+        this.dynamicCanvas.addEventListener("touchmove", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+            let t: Touch | undefined;
+            let event: SimplePointerEvent | undefined;
+
+            if (e.touches.length > 0) {
+                t = e.touches[0];
+                event = {
+                    x: t.clientX - rect.left,
+                    y: t.clientY - rect.top,
+                    buttons: -1, // touch doesn't have buttons
+                    dx: -9999, dy: -9999
+                };
+
+                if (this.lastX === -9999) {
+                    event.dx = 0;
+                    event.dy = 0;
+                } else {
+                    event.dx = (event.x - this.lastX);
+                    event.dy = (event.y - this.lastY);
+                }
+            }
+
+            if (e.touches.length == 1) {
+                this.mouseDrag(event!);
+            }
+            else if (e.touches.length == 2) {
+
+                this.mousepan(event!);
+            }
+
+            this.lastX = event?.x ?? -9999;
+            this.lastY = event?.y ?? -9999;
+        })
+
+        this.dynamicCanvas.addEventListener("touchend", (e) => {
+            if (e.touches.length == 0) {
+                this.mouseup({
+                    x: this.lastX ?? -9999,
+                    y: this.lastY ?? -9999,
+                    buttons: -1,
+                    dx: 0,
+                    dy: 0
+                })
+            }
+
         })
     }
 
-    uploadCursorInfo(e: MouseEvent, force=false) {
+    lastX = -9999;
+    lastY = -9999;
+
+
+
+    uploadCursorInfo(e: SimplePointerEvent, force = false) {
         if (!this.space || !this.selfCursor) {
             return;
         }
 
-        if ( force || this.deltaTime > this.cursorUpdateThreshold) {
-            this.space.updateCursor(e.offsetX + this.cameraPos.x, e.offsetY + this.cameraPos.y, {
+        if (force || this.deltaTime > this.cursorUpdateThreshold) {
+            this.space.updateCursor(e.x + this.cameraPos.x, e.y + this.cameraPos.y, {
                 username: this.username,
                 color: this.selfCursor.color,
                 id: this.selfCursor.id
@@ -314,8 +405,8 @@ export class CanvasController {
         }
     }
 
-    mousepan(e: MouseEvent) {
-        const diff = new Vector2(e.movementX, e.movementY);
+    mousepan(e: SimplePointerEvent) {
+        const diff = new Vector2(e.dx, e.dy);
         this.cameraPos = this.cameraPos.sub(diff);
 
         if (this.selfCursor) {
@@ -328,7 +419,7 @@ export class CanvasController {
         this.needStaticRender = true;
     }
 
-    mouseup(e: MouseEvent) {
+    mouseup(e: SimplePointerEvent) {
         if (!this.currentLine) {
             return;
         }
@@ -347,13 +438,13 @@ export class CanvasController {
         // TODO upload results to perm storage
     }
 
-    mouseHover(e: MouseEvent) {
+    mouseHover(e: SimplePointerEvent) {
         if (this.selfCursor)
-            this.selfCursor.pos = new Vector2(e.offsetX, e.offsetY);
+            this.selfCursor.pos = new Vector2(e.x, e.y);
         this.uploadCursorInfo(e);
     }
 
-    mouseDrag(e: MouseEvent) {
+    mouseDrag(e: SimplePointerEvent) {
         // TODO color and thickness modifier
 
         if (!this.currentLine) {
@@ -361,10 +452,10 @@ export class CanvasController {
         }
 
         if (this.selfCursor)
-            this.selfCursor.pos = new Vector2(e.offsetX, e.offsetY);
+            this.selfCursor.pos = new Vector2(e.x, e.y);
 
 
-        this.currentLine.appendPoint(new Vector2(e.offsetX, e.offsetY).add(this.cameraPos));
+        this.currentLine.appendPoint(new Vector2(e.x, e.y).add(this.cameraPos));
         this.dynamicLines.set(this.currentLine.id, this.currentLine);
         this.needDynamicRender = true;
 

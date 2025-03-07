@@ -65,6 +65,8 @@
         border: 2px solid red;
         cursor: none;
         overflow: hidden;
+        /* margin-left: 1000px;
+        margin-top: 1000px; */
     }
 
     .staticCanvas,
