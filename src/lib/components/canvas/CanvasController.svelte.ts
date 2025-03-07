@@ -124,30 +124,23 @@ class Line {
      */
     pointCollision(p0: Vector2) {
 
-
-        
         if (this.aabb && !this.aabb.contains(p0)) {
             return false;
         }
 
-        for (const p of this.points){
-            console.log(p.distTo(p0) );
-            
-            if(p.distTo(p0) < this.thickness){
+        let prev = this.points[0];
+
+        for (let i = 1; i < this.points.length; i++) {
+            const tangentDist = pointDistanceToLineSegment(prev, this.points[i], p0);
+            const segmentDist = this.points[i].distTo(prev) + this.thickness * 2;
+
+            // point dist to line is less than limit
+            // also check that p0 is sorta "between" the line segment points.
+            if (tangentDist < (this.thickness + 1) && prev.distTo(p0) < segmentDist && this.points[i].distTo(p0) < segmentDist) {
                 return true;
             }
+            prev = this.points[i];
         }
-
-
-        // let prev = this.points[0];
-
-        // for (let i = 1; i < this.points.length; i++) {
-          
-        //     if (pointDistanceToLineSegment(prev, this.points[i], p) < (this.thickness + 1)) {
-        //         return true;
-        //     }
-        //     prev = this.points[i];
-        // }
 
         return false;
     }
@@ -283,8 +276,11 @@ export class CanvasController {
     finalizeDeletedLines() {
         if (this.deltaTime >= this.cursorUpdateThreshold) {
 
-            // broadcast results
-            this.space?.deleteLines(this.toDelete.map(item => item.id));
+            if(this.toDelete.length > 0){
+
+                // broadcast results
+                this.space?.deleteLines(this.toDelete.map(item => item.id));
+            }
 
 
             // TODO uplaod to google

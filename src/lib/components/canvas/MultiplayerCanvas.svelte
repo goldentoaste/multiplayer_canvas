@@ -29,7 +29,7 @@
 
     onDestroy(()=>{
         if(canvasController){
-            canvasController.cleanup();
+            // canvasController.cleanup();
         }
     })
 
