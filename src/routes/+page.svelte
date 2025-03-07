@@ -28,7 +28,7 @@
 <label for="name">Enter your name to continue: <input id="name" type="text" bind:value="{username}"/></label>
 
 
-<MultiplayerCanvas size={{width:800, height:600}} {username}/>
+<MultiplayerCanvas size={{width:1200, height:800}} {username}/>
 
 <style>
     

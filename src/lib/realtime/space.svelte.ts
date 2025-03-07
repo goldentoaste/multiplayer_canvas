@@ -32,7 +32,7 @@ export interface CursorInfo {
     }
 }
 
-export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent: CursorUpdate) => void) {
+export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent: CursorUpdate) => void, deleteEvent?:(idsToDelete:string[])=>void) {
     // const clientId = localStorage.getItem("clientId") ?? crypto.randomUUID();
     // localStorage.setItem("clientId", clientId)
     const clientId = crypto.randomUUID();
@@ -59,6 +59,12 @@ export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent
         }
     });
 
+    // delete
+    const deleteChannel = realtimeClient.channels.get("delete", );
+    deleteChannel.subscribe("deleteLines", (e)=>{
+        deleteEvent &&  deleteEvent((e.data as string[]) ?? []);
+    });
+
     return {
         canvasSpace,
         user,
@@ -81,6 +87,9 @@ export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent
                     currentLine
                 }
             })
+        },
+        async deleteLines(toDelete: string[]){
+            await deleteChannel.publish("deleteLines", toDelete);
         }
 
     }

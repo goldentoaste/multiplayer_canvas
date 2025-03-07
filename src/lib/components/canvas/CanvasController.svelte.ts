@@ -1,5 +1,5 @@
 import { joinSpace } from "$lib/realtime/space.svelte";
-import { AABB, Vector2 } from "$lib/Vector2";
+import { AABB, pointDistanceToLineSegment, Vector2 } from "$lib/Vector2";
 import type { CursorData, CursorUpdate } from "@ably/spaces";
 import { untrack } from "svelte";
 
@@ -51,6 +51,13 @@ class Line {
         }
 
         ctx.stroke(); // done!
+
+
+        if (this.aabb) {
+            const aabb = this.aabb;
+            ctx.strokeStyle = "red";
+            ctx.strokeRect(aabb.x, aabb.y, aabb.width, aabb.height);
+        }
     }
 
 
@@ -110,6 +117,44 @@ class Line {
     }
 
 
+    /**
+     * returns true if p is colliding with this line, ie
+     * distance of p to line is less thickness
+     * @param p 
+     */
+    pointCollision(p0: Vector2) {
+
+
+        
+        if (this.aabb && !this.aabb.contains(p0)) {
+            return false;
+        }
+
+        for (const p of this.points){
+            console.log(p.distTo(p0) );
+            
+            if(p.distTo(p0) < this.thickness){
+                return true;
+            }
+        }
+
+
+        // let prev = this.points[0];
+
+        // for (let i = 1; i < this.points.length; i++) {
+          
+        //     if (pointDistanceToLineSegment(prev, this.points[i], p) < (this.thickness + 1)) {
+        //         return true;
+        //     }
+        //     prev = this.points[i];
+        // }
+
+        return false;
+    }
+
+
+
+
 }
 
 /**
@@ -148,14 +193,14 @@ export class CanvasController {
     cameraPos: Vector2;
     cameraZoom: number = 1;
 
-    staticLines: Line[]; // lines that is already drawn, to be rendered on initial load, into canvas buffer
+    staticLines: Map<string, Line>; // lines that is already drawn, to be rendered on initial load, into canvas buffer
     dynamicLines: Map<string, Line>; // lines that is currently drawing, to be transfered to staticLines and render to buffer when done.
 
     ctxStatic: CanvasRenderingContext2D;
     ctxDynamic: CanvasRenderingContext2D;
 
-    needStaticRender = false;
-    needDynamicRender = false; // boolean flag to indicate if either needs rerendering
+    needStaticRender = true;
+    needDynamicRender = true; // boolean flag to indicate if either needs rerendering
 
     selfCursor: Cursor | undefined = $state(undefined); // Cursor is a primitive obj, so should be deeply reactive by Svelte
     othersCursors: { [clientId: string]: Cursor } = $state({});
@@ -170,6 +215,7 @@ export class CanvasController {
     cursorUpdateThreshold = 45; // 100ms for each web cursor update
 
     deleteMode = $state(false);
+    toDelete: Line[] = [];
 
 
     constructor(staticCanvas: HTMLCanvasElement, dynamicCanvas: HTMLCanvasElement) {
@@ -178,8 +224,11 @@ export class CanvasController {
 
         this.cameraPos = Vector2.ZERO;
 
-        this.staticLines = [];
+        this.staticLines = new Map();
         this.dynamicLines = new Map(); // TODO, fetch from db
+
+        this.staticLines.set("123", new Line("123", 2, "black", [new Vector2(100, 100), new Vector2(200, 200), new Vector2(205, 200), new Vector2(210, 210)]))
+        this.staticLines.get("123")?.makeAABB();
 
         this.ctxStatic = this.staticCanvas.getContext("2d")!;
         this.ctxDynamic = this.dynamicCanvas.getContext("2d")!;
@@ -211,6 +260,8 @@ export class CanvasController {
     render() {
         this.updateDeltaTime();
 
+        this.finalizeDeletedLines(); ``
+
 
         this.renderDynamic();
         this.renderStatic();
@@ -229,7 +280,21 @@ export class CanvasController {
 
     // ============ End Render loop ============
 
+    finalizeDeletedLines() {
+        if (this.deltaTime >= this.cursorUpdateThreshold) {
 
+            // broadcast results
+            this.space?.deleteLines(this.toDelete.map(item => item.id));
+
+
+            // TODO uplaod to google
+            // ...
+
+
+            // done, clear deletes
+            this.toDelete.length = 0;
+        }
+    }
 
 
     // ============ events ============
@@ -261,13 +326,21 @@ export class CanvasController {
             this.needStaticRender = true;
             const line = this.dynamicLines.get(user.id)!;
             line.makeAABB(); //jank
-            this.staticLines.push(line);
+            this.staticLines.set(line.id, line)
             this.dynamicLines.delete(user.id);
         }
 
         this.needDynamicRender = true;
 
     }
+
+    handleDeletes(idsToDelete: string[]) {
+        for (const id of idsToDelete) {
+            this.staticLines.delete(id);
+        }
+        this.needStaticRender = true;
+    }
+
 
 
 
@@ -283,8 +356,6 @@ export class CanvasController {
                 undefined,
                 Vector2.ZERO)
         })
-
-
     }
 
     initEvents() {
@@ -324,8 +395,8 @@ export class CanvasController {
 
 
         // touch related
-        this.dynamicCanvas.addEventListener("touchstart", (e)=>{
-            if(e.touches.length == 1){
+        this.dynamicCanvas.addEventListener("touchstart", (e) => {
+            if (e.touches.length == 1) {
                 const t = e.touches[0];
                 const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
                 this.lastX = t.clientX - rect.left;
@@ -426,7 +497,7 @@ export class CanvasController {
 
         // smooth n reduce
         this.currentLine.pointsCulling(0.5, 1);
-        this.staticLines.push(this.currentLine);
+        this.staticLines.set(this.currentLine.id, this.currentLine);
         this.dynamicLines.delete(this.currentLine.id);
         // broadcast the smoothed version
         this.uploadCursorInfo(e, true);
@@ -444,8 +515,18 @@ export class CanvasController {
         this.uploadCursorInfo(e);
     }
 
+
     mouseDrag(e: SimplePointerEvent) {
         // TODO color and thickness modifier
+
+        if (this.deleteMode) {
+            // delete colliding lines
+            this.deleteCollidedLines(new Vector2(e.x, e.y).add(this.cameraPos));
+
+            if (this.selfCursor)
+                this.selfCursor.pos = new Vector2(e.x, e.y);
+            return;
+        }
 
         if (!this.currentLine) {
             this.currentLine = new Line(crypto.randomUUID(), 4, "black", []);
@@ -464,10 +545,28 @@ export class CanvasController {
     }
 
 
+    deleteCollidedLines(p: Vector2) {
+
+        for (const line of this.staticLines.values()) {
+            if (line.pointCollision(p)) {
+                this.toDelete.push(line);
+            }
+        }
+
+        for (const line of this.toDelete) {
+            this.staticLines.delete(line.id);
+        }
+
+        if (this.toDelete.length > 0) {
+            this.needStaticRender = true;
+        }
+
+        // TODO broadcast delete message
+
+        // TODO delete in firebase
+    }
 
     // ============ end events ============
-
-
 
     renderStatic() {
         if (!this.needStaticRender) {
@@ -479,7 +578,7 @@ export class CanvasController {
         ctx.clearRect(0, 0, this.staticCanvas.width, this.staticCanvas.height)
         ctx.translate(-this.cameraPos.x, -this.cameraPos.y);
 
-        for (const line of Object.values(this.staticLines)) {
+        for (const line of this.staticLines.values()) {
             line.render(ctx);
         }
 

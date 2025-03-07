@@ -76,7 +76,7 @@ export class Vector2 {
         return other.sub(this).mag();
     }
 
-    clone(){
+    clone() {
         return new Vector2(this.x, this.y);
     }
 }
@@ -101,11 +101,27 @@ export class AABB {
      * expand this AABB inplace to contain the given point
      * @param point 
      */
-    expandToContain(point:Vector2){
+    expandToContain(point: Vector2) {
         this.topleft.x = Math.min(point.x, this.topleft.x);
         this.topleft.y = Math.min(point.y, this.topleft.y);
-        this.botright.x = Math.max(point.x, this.topleft.x);
-        this.botright.y = Math.max(point.y, this.topleft.y);
+        this.botright.x = Math.max(point.x, this.botright.x);
+        this.botright.y = Math.max(point.y, this.botright.y);
+    }
+
+    get x() {
+        return this.topleft.x;
+    }
+
+    get y() {
+        return this.topleft.y;
+    }
+
+    get width() {
+        return this.botright.x - this.topleft.x;
+    }
+
+    get height() {
+        return this.botright.y - this.topleft.y;
     }
 
 }
@@ -117,7 +133,7 @@ export class AABB {
  * @param l2 
  * @param p 
  */
-export function pointDistanceToLineSegment(l1:Vector2, l2:Vector2, p:Vector2){
+export function pointDistanceToLineSegment(l1: Vector2, l2: Vector2, p: Vector2) {
     // calculate distance via area of the triangle formed by the 2 points, then divide by base to get height, which distance from point to line
     // https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
     const x0 = p.x, y0 = p.y;
@@ -125,7 +141,7 @@ export function pointDistanceToLineSegment(l1:Vector2, l2:Vector2, p:Vector2){
     const x2 = l2.x, y2 = l2.y;
 
     const area2 = Math.abs(
-        ((y2 - y1) * x0) - ((x2 - x1) * y0) + x2*y1 - y2*x1
+        ((y2 - y1) * x0) - ((x2 - x1) * y0) + x2 * y1 - y2 * x1
     );
 
     const base = l2.distTo(l1);
