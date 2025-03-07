@@ -51,13 +51,6 @@ class Line {
         }
 
         ctx.stroke(); // done!
-
-
-        if (this.aabb) {
-            const aabb = this.aabb;
-            ctx.strokeStyle = "red";
-            ctx.strokeRect(aabb.x, aabb.y, aabb.width, aabb.height);
-        }
     }
 
 
@@ -220,9 +213,6 @@ export class CanvasController {
         this.staticLines = new Map();
         this.dynamicLines = new Map(); // TODO, fetch from db
 
-        this.staticLines.set("123", new Line("123", 2, "black", [new Vector2(100, 100), new Vector2(200, 200), new Vector2(205, 200), new Vector2(210, 210)]))
-        this.staticLines.get("123")?.makeAABB();
-
         this.ctxStatic = this.staticCanvas.getContext("2d")!;
         this.ctxDynamic = this.dynamicCanvas.getContext("2d")!;
 
@@ -276,8 +266,7 @@ export class CanvasController {
     finalizeDeletedLines() {
         if (this.deltaTime >= this.cursorUpdateThreshold) {
 
-            if(this.toDelete.length > 0){
-
+            if (this.toDelete.length > 0) {
                 // broadcast results
                 this.space?.deleteLines(this.toDelete.map(item => item.id));
             }
@@ -344,6 +333,9 @@ export class CanvasController {
         joinSpace(undefined,
             (e) => {
                 this.handleCursorUpdate(e);
+            },
+            (e) => {
+                this.handleDeletes(e);
             }
         ).then((space) => {
             this.space = space;

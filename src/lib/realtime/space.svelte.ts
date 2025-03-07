@@ -32,7 +32,7 @@ export interface CursorInfo {
     }
 }
 
-export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent: CursorUpdate) => void, deleteEvent?:(idsToDelete:string[])=>void) {
+export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent: CursorUpdate) => void, deleteEvent?: (idsToDelete: string[]) => void) {
     // const clientId = localStorage.getItem("clientId") ?? crypto.randomUUID();
     // localStorage.setItem("clientId", clientId)
     const clientId = crypto.randomUUID();
@@ -42,7 +42,7 @@ export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent
     });
     const spaces = new Spaces(realtimeClient);
 
-    const canvasSpace = await spaces.get("canvas", { cursors: { paginationLimit: 0, outboundBatchInterval:20 }, offlineTimeout: 10, },);
+    const canvasSpace = await spaces.get("canvas", { cursors: { paginationLimit: 0, outboundBatchInterval: 20 }, offlineTimeout: 10, },);
 
 
     const user: UserType = {
@@ -53,16 +53,16 @@ export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent
     await canvasSpace.enter({ ...user },);
 
     // live cursor update
-    canvasSpace.cursors.subscribe("update", (e)=>{
-        if(e.clientId !== clientId){
+    canvasSpace.cursors.subscribe("update", (e) => {
+        if (e.clientId !== clientId) {
             onCursorUpdate && onCursorUpdate(e);
         }
     });
 
     // delete
-    const deleteChannel = realtimeClient.channels.get("delete", );
-    deleteChannel.subscribe("deleteLines", (e)=>{
-        deleteEvent &&  deleteEvent((e.data as string[]) ?? []);
+    const deleteChannel = realtimeClient.channels.get("delete",);
+    deleteChannel.subscribe("deleteLines", (e) => {
+        deleteEvent && deleteEvent((e.data as string[]) ?? []);
     });
 
     return {
@@ -78,7 +78,7 @@ export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent
                 username: name
             })
         },
-        updateCursor: (x: number, y: number,user:UserType, currentLine?: SerializedLineType, ) => {
+        updateCursor: (x: number, y: number, user: UserType, currentLine?: SerializedLineType,) => {
             canvasSpace.cursors.set({
                 position: {
                     x, y
@@ -88,8 +88,10 @@ export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent
                 }
             })
         },
-        async deleteLines(toDelete: string[]){
+        async deleteLines(toDelete: string[]) {
+
             await deleteChannel.publish("deleteLines", toDelete);
+
         }
 
     }
