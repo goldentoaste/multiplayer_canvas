@@ -29,6 +29,13 @@ export class Vector2 {
         return [this.x, this.y];
     }
 
+    toObj(){
+        return {
+            x:this.x,
+            y:this.y
+        }
+    }
+
     static fromArr(arr: [number, number]) {
         return new Vector2(arr[0], arr[1]);
     }

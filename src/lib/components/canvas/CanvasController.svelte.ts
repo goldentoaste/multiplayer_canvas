@@ -249,23 +249,21 @@ export class CanvasController {
         requestAnimationFrame(this.render.bind(this));
     }
 
-    render() {
-        this.updateDeltaTime();
+    render(t: number) {
+        this.updateDeltaTime(t);
 
-        this.finalizeDeletedLines(); ``
-
-
+        this.firebaseController.update(t);
+        this.finalizeDeletedLines();
         this.renderDynamic();
         this.renderStatic();
         // do things
         requestAnimationFrame(this.render.bind(this))
     }
 
-    updateDeltaTime() {
-        const currentTime = new Date().getTime();
-        this.deltaTime = currentTime - this.lastFrameTime;
+    updateDeltaTime(t: number) {
+        this.deltaTime = t - this.lastFrameTime;
         if (this.deltaTime > this.cursorUpdateThreshold) {
-            this.lastFrameTime = currentTime;
+            this.lastFrameTime = t;
         }
     }
 
@@ -280,7 +278,6 @@ export class CanvasController {
                 this.space?.deleteLines(this.toDelete.map(item => item.id));
             }
 
-
             // TODO uplaod to google
             // ...
 
@@ -294,8 +291,16 @@ export class CanvasController {
     // ============ events ============
 
 
-    startStorage() {
-        this.firebaseController.fullFetch();
+    async startStorage() {
+        const lines = await this.firebaseController.fullFetch();
+
+        // lines from db.
+        for (const line of lines) {
+            this.staticLines.set(line.id, line);
+        }
+
+        // render
+        this.needStaticRender = true;
     }
 
     handleCursorUpdate(e: CursorUpdate) {
@@ -339,8 +344,6 @@ export class CanvasController {
         }
         this.needStaticRender = true;
     }
-
-
 
 
     startRealTime() {
@@ -504,7 +507,10 @@ export class CanvasController {
         // broadcast the smoothed version
         this.uploadCursorInfo(e, true);
 
+        // queue the item to be uploaded
+        this.firebaseController.additionQueue.push(this.currentLine);
 
+        // clean up
         this.currentLine = undefined;
         this.needStaticRender = true;
         this.needDynamicRender = true;
@@ -557,6 +563,9 @@ export class CanvasController {
 
         for (const line of this.toDelete) {
             this.staticLines.delete(line.id);
+
+            // queue the item to be deleted in db
+            this.firebaseController.deletionQueue.push(line.id);
         }
 
         if (this.toDelete.length > 0) {
