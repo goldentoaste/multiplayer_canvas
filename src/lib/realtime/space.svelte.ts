@@ -72,13 +72,17 @@ export async function joinSpace(username?: string, onCursorUpdate?: (cursorEvent
             canvasSpace.leave();
             realtimeClient.close();
         },
-        updateProfile: (name: string) => {
+        updateProfile: (name: string, color:string) => {
             canvasSpace.updateProfileData({
                 ...user,
+                color,
                 username: name
             })
         },
         updateCursor: (x: number, y: number, user: UserType, currentLine?: SerializedLineType,) => {
+            if(!user || !user.username || user.username.length === 0){
+                return;
+            }
             canvasSpace.cursors.set({
                 position: {
                     x, y

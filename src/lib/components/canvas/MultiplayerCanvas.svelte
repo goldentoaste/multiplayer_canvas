@@ -1,15 +1,15 @@
 <script lang="ts">
-    import { CanvasController } from "./CanvasController.svelte";
+    import { CanvasController, type UserData } from "./CanvasController.svelte";
     import UserCursor from "../Cursor/UserCursor.svelte";
     import { onDestroy } from "svelte";
 
     interface CanvasProps {
         size?: { width: number; height: number };
         style?: string;
-        username?: string;
+        userdata?: UserData;
     }
 
-    let { size, style, username }: CanvasProps = $props();
+    let { size, style, userdata }: CanvasProps = $props();
 
     let staticCanvas: HTMLCanvasElement | undefined = $state();
     let dynamicCanvas: HTMLCanvasElement | undefined = $state();
@@ -22,38 +22,47 @@
     });
 
     $effect(() => {
-        if (canvasController && username) {
-            canvasController.username = username;
+        if (canvasController && userdata) {
+            canvasController.userdata = userdata;
         }
     });
 
-    onDestroy(()=>{
-        if(canvasController){
+    onDestroy(() => {
+        if (canvasController) {
             // canvasController.cleanup();
         }
-    })
-
- 
+    });
 </script>
 
-<span>Delete mode: {canvasController?.deleteMode}</span> <button onclick="{()=>{
-    canvasController && (canvasController.deleteMode = !canvasController.deleteMode)
-}}">toggle delete</button>
+<span>Delete mode: {canvasController?.deleteMode}</span>
+<button
+    onclick={() => {
+        canvasController && (canvasController.deleteMode = !canvasController.deleteMode);
+    }}>toggle delete</button
+>
 <div
     class="canvasContainer"
     style={`${style ?? ""} ${size ? `width: ${size.width}px; height: ${size.height}px;` : ""}`}
 >
-    <canvas bind:this={staticCanvas} class="staticCanvas" width="{size?.width }px" height="{size?.height}"></canvas>
-    <canvas bind:this={dynamicCanvas} class="dynamicCanvas" width="{size?.width }px" height="{size?.height}"></canvas>
+    <canvas
+        bind:this={staticCanvas}
+        class="staticCanvas"
+        width="{size?.width}px"
+        height={size?.height}
+    ></canvas>
+    <canvas
+        bind:this={dynamicCanvas}
+        class="dynamicCanvas"
+        width="{size?.width}px"
+        height={size?.height}
+    ></canvas>
     <div class="cursorContainer">
         {#if canvasController}
             {#each Object.values(canvasController.othersCursors) as cursor, _ (cursor.id)}
-          
                 <UserCursor {...cursor} />
             {/each}
         {/if}
         {#if canvasController?.selfCursor}
-
             <UserCursor {...canvasController.selfCursor} instant />
         {/if}
     </div>
@@ -82,8 +91,4 @@
     .cursorContainer {
         pointer-events: none;
     }
-
-
-
-
 </style>

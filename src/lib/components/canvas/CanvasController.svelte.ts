@@ -4,6 +4,13 @@ import { AABB, pointDistanceToLineSegment, Vector2 } from "$lib/Vector2";
 import type { CursorData, CursorUpdate } from "@ably/spaces";
 import { untrack } from "svelte";
 
+export interface UserData {
+    username:string,
+    color:string,
+    penColor:string,
+    penThickness:number
+}
+
 export interface SerializedLineType {
     id: string, thickness: number, color: string, points: [number, number][]
 }
@@ -194,7 +201,7 @@ export class CanvasController {
 
 
     space: Awaited<ReturnType<typeof joinSpace>> | undefined = $state();
-    username: string | undefined = $state();
+    userdata:UserData | undefined = $state();
     currentLine: Line | undefined;
 
     lastFrameTime: number = 0;
@@ -222,13 +229,14 @@ export class CanvasController {
 
         $effect(() => {
 
-            if (this.space && this.username) {
-                this.space.updateProfile(this.username);
+            if (this.space && this.userdata) {
+                this.space.updateProfile(this.userdata.username, this.userdata.color);
             }
 
             if (this.space && this.selfCursor) {
                 untrack(() => {
-                    this.selfCursor!.username = this.username;
+                    this.selfCursor!.username = this.userdata?.username;
+                    this.selfCursor!.color = this.userdata?.color ?? "red";
                 })
 
             }
@@ -474,7 +482,7 @@ export class CanvasController {
 
         if (force || this.deltaTime > this.cursorUpdateThreshold) {
             this.space.updateCursor(e.x + this.cameraPos.x, e.y + this.cameraPos.y, {
-                username: this.username,
+                username: this.userdata?.username,
                 color: this.selfCursor.color,
                 id: this.selfCursor.id
             }, this.currentLine?.serialize());
@@ -537,7 +545,7 @@ export class CanvasController {
         }
 
         if (!this.currentLine) {
-            this.currentLine = new Line(crypto.randomUUID(), 4, "black", []);
+            this.currentLine = new Line(crypto.randomUUID(), this.userdata?.penThickness ?? 4, this.userdata?.penColor ?? "black", []);
         }
 
         if (this.selfCursor)
