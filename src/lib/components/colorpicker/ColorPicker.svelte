@@ -22,6 +22,16 @@
             }}
         ></button>
     {/each}
+
+    <span
+        >Custom color:
+        <input
+            type="color"
+            onchange={(e) => {
+                selectedColor = (e.target as HTMLInputElement).value;
+            }}
+        /></span
+    >
 </div>
 
 <style>
@@ -30,6 +40,7 @@
         flex-direction: row;
 
         gap: 0.5rem;
+        align-items: center;
     }
 
     .colorItem {
@@ -54,12 +65,16 @@
         width: calc(100% + 2px);
         height: calc(100% + 2px);
 
-
-
         background-color: transparent;
         border: 2px solid var(--color);
         border-radius: 50%;
 
         transform: translate(-50%, -50%);
+    }
+
+    span {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
     }
 </style>
