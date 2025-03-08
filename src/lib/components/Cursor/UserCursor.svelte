@@ -16,29 +16,27 @@
     let smoothPos = new Spring(
         {
             x: pos.x,
-            y:pos.y
+            y: pos.y,
         },
-        instant? {stiffness:0.4, damping:0.9}:{
-            stiffness: 0.1,
-            damping: 0.65,
-        },
+        instant
+            ? { stiffness: 0.4, damping: 0.9 }
+            : {
+                  stiffness: 0.1,
+                  damping: 0.65,
+              },
     );
 
-    $effect(()=>{ 
-        smoothPos.target = {x:pos.x, y: pos.y}
-    })
-
-
-    
-
+    $effect(() => {
+        smoothPos.target = { x: pos.x, y: pos.y };
+    });
 </script>
-
 
 {#if username || true}
     <div
         class="cursor"
         style="--x:{smoothPos.current.x}px; --y:{smoothPos.current.y}px; --color:{color};"
         transition:fade={{ duration: 400 }}
+        class:rainbow={username?.toLowerCase() === "surge"}
     >
         {username}
     </div>
@@ -86,5 +84,42 @@
 
         opacity: 0.2;
         background-color: var(--color);
+    }
+
+    .rainbow {
+        animation: spinning infinite linear 0.75s backwards;
+    }
+    .rainbow::before{
+        animation: rainbowAni infinite linear 1s;
+    }
+
+    .rainbow::after{
+        animation: rainbowAni infinite linear 1s;
+    }
+
+
+
+    @keyframes rainbowAni {
+        0% {
+            background-color: hsl(0, 100%, 70%);
+            filter: hue-rotate(0deg);
+        }
+
+        100% {
+            background-color: hsl(0, 100%, 70%);
+            filter: hue-rotate(360deg);
+        }
+    }
+
+    @keyframes spinning {
+        0% {
+            transform-origin: top left;
+            transform:  rotate() ;
+        }
+
+        100% {
+            transform-origin: top left;
+            transform:  rotate(360deg) ;
+        }
     }
 </style>
