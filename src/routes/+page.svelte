@@ -58,6 +58,17 @@
 
 <MultiplayerCanvas size={{ width: 1200, height: 800 }} {userdata} />
 
+<p>Some instructions</p>
+<ul>
+    <li>Choose your *username*, *cursor color*, *pen thickness* and *pen color*</li>
+
+    <li>Click and drag to draw</li>
+    <li>!! Middle mouse to PAN</li>
+
+    <li>Mobile: 1 finger to draw</li>
+    <li>Mobile 2 fingers to *pan*!</li>
+</ul>
+
 <style>
     .contaienr {
         display: flex;
