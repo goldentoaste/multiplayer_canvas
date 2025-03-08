@@ -1,3 +1,4 @@
+import { CanvasFirebaseController } from "$lib/firebase/CanvasFirebaseController";
 import { joinSpace } from "$lib/realtime/space.svelte";
 import { AABB, pointDistanceToLineSegment, Vector2 } from "$lib/Vector2";
 import type { CursorData, CursorUpdate } from "@ably/spaces";
@@ -6,7 +7,7 @@ import { untrack } from "svelte";
 export interface SerializedLineType {
     id: string, thickness: number, color: string, points: [number, number][]
 }
-class Line {
+export class Line {
     id: string;
     thickness: number; // in px
     color: string; // html color name or hex
@@ -125,15 +126,15 @@ class Line {
     pointCollision(p0: Vector2) {
 
 
-        
+
         if (this.aabb && !this.aabb.contains(p0)) {
             return false;
         }
 
-        for (const p of this.points){
-            console.log(p.distTo(p0) );
-            
-            if(p.distTo(p0) < this.thickness){
+        for (const p of this.points) {
+            console.log(p.distTo(p0));
+
+            if (p.distTo(p0) < this.thickness) {
                 return true;
             }
         }
@@ -142,7 +143,7 @@ class Line {
         // let prev = this.points[0];
 
         // for (let i = 1; i < this.points.length; i++) {
-          
+
         //     if (pointDistanceToLineSegment(prev, this.points[i], p) < (this.thickness + 1)) {
         //         return true;
         //     }
@@ -218,6 +219,9 @@ export class CanvasController {
     toDelete: Line[] = [];
 
 
+    firebaseController: CanvasFirebaseController;
+
+
     constructor(staticCanvas: HTMLCanvasElement, dynamicCanvas: HTMLCanvasElement) {
         this.staticCanvas = staticCanvas;
         this.dynamicCanvas = dynamicCanvas;
@@ -247,9 +251,14 @@ export class CanvasController {
             }
         })
 
+        this.firebaseController = new CanvasFirebaseController();
+
+
+        this.startStorage();
         this.initEvents();
         this.startRealTime();
         this.startRender();
+
     }
 
     // ============ Render loop ============
@@ -298,6 +307,11 @@ export class CanvasController {
 
 
     // ============ events ============
+
+
+    startStorage() {
+        this.firebaseController.fullFetch();
+    }
 
     handleCursorUpdate(e: CursorUpdate) {
         if (!e.data) {

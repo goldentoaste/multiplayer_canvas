@@ -22,6 +22,7 @@
 	},
 	"dependencies": {
 		"@ably/spaces": "^0.4.0",
+		"@firebase/firestore": "^4.7.9",
 		"ably": "^2.6.3"
 	}
 }
