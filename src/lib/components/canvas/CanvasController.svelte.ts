@@ -5,25 +5,35 @@ import type { CursorData, CursorUpdate } from "@ably/spaces";
 import { untrack } from "svelte";
 
 export interface UserData {
-    username:string,
-    color:string,
-    penColor:string,
-    penThickness:number
+    username: string,
+    color: string,
+    penInfo: PenInfo
+}
+
+export interface PenInfo {
+    penColor: string,
+    penThickness: number,
+    layer: number,
+    smoothing: boolean,
+    icon?: string,
+    name?: string
 }
 
 export interface SerializedLineType {
-    id: string, thickness: number, color: string, points: [number, number][]
+    id: string, thickness: number, color: string, points: [number, number][], layer: number
 }
 export class Line {
     id: string;
     thickness: number; // in px
     color: string; // html color name or hex
+    layer: number;
     points: Vector2[];
     aabb: AABB | undefined = undefined;
-    constructor(id: string, thickness: number, color: string, points: Vector2[]) {
+    constructor(id: string, thickness: number, color: string, layer: number, points: Vector2[]) {
         this.id = id;
         this.thickness = thickness;
         this.color = color;
+        this.layer = layer;
         this.points = points;
     }
 
@@ -66,7 +76,7 @@ export class Line {
      * remove points that are epsilon within each other
      * @param epsilon 
      */
-    pointsCulling(epsilon: number, smoothRange: number) {
+    pointsCulling(epsilon: number, smoothRange: number, smooth: boolean) {
         for (let i = this.points.length - 1; i > 0; i--) {
             if (this.points[i].sub(this.points[i - 1]).mag() < epsilon) {
                 this.points.splice(i, 1);
@@ -77,21 +87,23 @@ export class Line {
         // construct the aabb during smoothing
         this.aabb = new AABB(this.points[0].clone(), this.points[0].clone());
 
+        if (smooth) {
+            // smooth the remaining points
+            for (let i = 0; i < this.points.length; i++) {
+                let sum = Vector2.ZERO;
 
-        // smooth the remaining points
-        for (let i = 0; i < this.points.length; i++) {
-            let sum = Vector2.ZERO;
+                const start = Math.max(0, i - smoothRange);
+                const end = Math.min(i + smoothRange, this.points.length);
 
-            const start = Math.max(0, i - smoothRange);
-            const end = Math.min(i + smoothRange, this.points.length);
+                for (let j = start; j < end; j++) {
+                    sum.addi(this.points[j]);
+                }
 
-            for (let j = start; j < end; j++) {
-                sum.addi(this.points[j]);
+                this.points[i] = sum.mul(1 / (end - start));
+                this.aabb.expandToContain(this.points[i]);
             }
-
-            this.points[i] = sum.mul(1 / (end - start));
-            this.aabb.expandToContain(this.points[i]);
         }
+
     }
 
     serialize() {
@@ -99,14 +111,21 @@ export class Line {
             id: this.id,
             thickness: this.thickness,
             color: this.color,
+            layer: this.layer,
             points: this.points.map(item => item.toArr())
         } as SerializedLineType
     }
 
-    static deserialize(obj: SerializedLineType) {
-        return new Line(
-            obj.id, obj.thickness, obj.color, obj.points.map(item => Vector2.fromArr(item))
+    static deserialize(obj: SerializedLineType, makeAABB = false) {
+        const line = new Line(
+            obj.id, obj.thickness, obj.color, obj.layer, obj.points.map(item => Vector2.fromArr(item))
         );
+
+        if (makeAABB) {
+            line.makeAABB();
+        }
+
+        return line;
     }
 
     makeAABB() {
@@ -187,8 +206,9 @@ export class CanvasController {
     cameraPos: Vector2;
     cameraZoom: number = 1;
 
-    staticLines: Map<string, Line>; // lines that is already drawn, to be rendered on initial load, into canvas buffer
-    dynamicLines: Map<string, Line>; // lines that is currently drawing, to be transfered to staticLines and render to buffer when done.
+    maxLayers: number;
+    staticLines: Map<string, Line>[]; // lines that is already drawn, to be rendered on initial load, into canvas buffer
+    dynamicLines: Map<string, Line>[]; // lines that is currently drawing, to be transfered to staticLines and render to buffer when done.
 
     ctxStatic: CanvasRenderingContext2D;
     ctxDynamic: CanvasRenderingContext2D;
@@ -201,7 +221,7 @@ export class CanvasController {
 
 
     space: Awaited<ReturnType<typeof joinSpace>> | undefined = $state();
-    userdata:UserData | undefined = $state();
+    userdata: UserData | undefined = $state();
     currentLine: Line | undefined;
 
     lastFrameTime: number = 0;
@@ -215,14 +235,20 @@ export class CanvasController {
     firebaseController: CanvasFirebaseController;
 
 
-    constructor(staticCanvas: HTMLCanvasElement, dynamicCanvas: HTMLCanvasElement) {
+    constructor(staticCanvas: HTMLCanvasElement, dynamicCanvas: HTMLCanvasElement, maxLayers: number) {
         this.staticCanvas = staticCanvas;
         this.dynamicCanvas = dynamicCanvas;
+        this.maxLayers = maxLayers;
 
         this.cameraPos = Vector2.ZERO;
 
-        this.staticLines = new Map();
-        this.dynamicLines = new Map(); // TODO, fetch from db
+        this.staticLines = [];
+        this.dynamicLines = []; // TODO, fetch from db
+
+        for (let i = 0; i < maxLayers; i++) {
+            this.staticLines.push(new Map());
+            this.dynamicLines.push(new Map());
+        }
 
         this.ctxStatic = this.staticCanvas.getContext("2d")!;
         this.ctxDynamic = this.dynamicCanvas.getContext("2d")!;
@@ -304,7 +330,7 @@ export class CanvasController {
 
         // lines from db.
         for (const line of lines) {
-            this.staticLines.set(line.id, line);
+            this.staticLines[line.layer].set(line.id, line);
         }
 
         // render
@@ -331,15 +357,7 @@ export class CanvasController {
         this.othersCursors = this.othersCursors;
 
         if (currentLine) {
-            this.dynamicLines.set(user.id, Line.deserialize(currentLine));
-        }
-
-        if (!currentLine && this.dynamicLines.has(user.id)) {
-            this.needStaticRender = true;
-            const line = this.dynamicLines.get(user.id)!;
-            line.makeAABB(); //jank
-            this.staticLines.set(line.id, line)
-            this.dynamicLines.delete(user.id);
+            this.dynamicLines[currentLine.layer].set(user.id, Line.deserialize(currentLine));
         }
 
         this.needDynamicRender = true;
@@ -348,20 +366,27 @@ export class CanvasController {
 
     handleDeletes(idsToDelete: string[]) {
         for (const id of idsToDelete) {
-            this.staticLines.delete(id);
+            for (const layer of this.staticLines) {
+                layer.delete(id);
+            }
         }
         this.needStaticRender = true;
+    }
+
+    handleNewLine(newLine: SerializedLineType) {
+        this.needStaticRender = true;
+        const line = Line.deserialize(newLine, true);
+        this.staticLines[line.layer].set(line.id, line);
+        this.dynamicLines[line.layer].delete(line.id);
+
     }
 
 
     startRealTime() {
         joinSpace(undefined,
-            (e) => {
-                this.handleCursorUpdate(e);
-            },
-            (e) => {
-                this.handleDeletes(e);
-            }
+            this.handleCursorUpdate.bind(this),
+            this.handleDeletes.bind(this),
+            this.handleNewLine.bind(this)
         ).then((space) => {
             this.space = space;
             this.selfCursor = new Cursor(this.space.user.id,
@@ -509,11 +534,11 @@ export class CanvasController {
         }
 
         // smooth n reduce
-        this.currentLine.pointsCulling(0.5, 1);
-        this.staticLines.set(this.currentLine.id, this.currentLine);
-        this.dynamicLines.delete(this.currentLine.id);
-        // broadcast the smoothed version
-        this.uploadCursorInfo(e, true);
+        this.currentLine.pointsCulling(0.5, 1, this.userdata?.penInfo.smoothing ?? true);
+        this.staticLines[this.currentLine.layer].set(this.currentLine.id, this.currentLine);
+        this.dynamicLines[this.currentLine.layer].delete(this.currentLine.id);
+
+        // broadcast new line to other realtime clients
 
         // queue the item to be uploaded
         this.firebaseController.additionQueue.push(this.currentLine);
@@ -545,7 +570,7 @@ export class CanvasController {
         }
 
         if (!this.currentLine) {
-            this.currentLine = new Line(crypto.randomUUID(), this.userdata?.penThickness ?? 4, this.userdata?.penColor ?? "black", []);
+            this.currentLine = new Line(crypto.randomUUID(), this.userdata?.penInfo.penThickness ?? 4, this.userdata?.penInfo.penColor ?? "black", this.userdata?.penInfo.layer ?? 0, []);
         }
 
         if (this.selfCursor)
