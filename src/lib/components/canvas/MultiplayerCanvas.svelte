@@ -7,16 +7,17 @@
         size?: { width: number; height: number };
         style?: string;
         userdata?: UserData;
+        maxLayers: number; // the highest layer that the pen options can provide
     }
 
-    let { size, style, userdata }: CanvasProps = $props();
+    let { size, style, userdata, maxLayers }: CanvasProps = $props();
 
     let staticCanvas: HTMLCanvasElement | undefined = $state();
     let dynamicCanvas: HTMLCanvasElement | undefined = $state();
 
     let canvasController = $derived.by(() => {
-        if (staticCanvas && dynamicCanvas) {
-            return new CanvasController(staticCanvas, dynamicCanvas);
+        if (staticCanvas && dynamicCanvas && maxLayers > 0) {
+            return new CanvasController(staticCanvas, dynamicCanvas, maxLayers);
         }
         return undefined;
     });

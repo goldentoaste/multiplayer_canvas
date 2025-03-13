@@ -144,7 +144,7 @@ export class Line {
      */
     pointCollision(p0: Vector2) {
 
-        if (this.aabb && !this.aabb.contains(p0)) {
+        if (this.aabb && !this.aabb.containsPoint(p0)) {
             return false;
         }
 
@@ -280,18 +280,19 @@ export class CanvasController {
 
     // ============ Render loop ============
     startRender() {
-        requestAnimationFrame(this.render.bind(this));
+        requestAnimationFrame(this.eventLoop.bind(this));
     }
 
-    render(t: number) {
+    eventLoop(t: number) {
         this.updateDeltaTime(t);
 
         this.firebaseController.update(t);
         this.finalizeDeletedLines();
-        this.renderDynamic();
-        this.renderStatic();
+
+        this.render(); // checks and redners both static and dynamic lines
+
         // do things
-        requestAnimationFrame(this.render.bind(this))
+        requestAnimationFrame(this.eventLoop.bind(this))
     }
 
     updateDeltaTime(t: number) {
@@ -312,9 +313,9 @@ export class CanvasController {
                 this.space?.deleteLines(this.toDelete.map(item => item.id));
             }
 
-            // TODO uplaod to google
-            // ...
-
+            for (const line in this.toDelete) {
+                this.firebaseController.deletionQueue.push(line);
+            }
 
             // done, clear deletes
             this.toDelete.length = 0;
@@ -578,7 +579,7 @@ export class CanvasController {
 
 
         this.currentLine.appendPoint(new Vector2(e.x, e.y).add(this.cameraPos));
-        this.dynamicLines.set(this.currentLine.id, this.currentLine);
+        this.dynamicLines[this.currentLine.layer].set(this.currentLine.id, this.currentLine);
         this.needDynamicRender = true;
 
         this.uploadCursorInfo(e);
@@ -588,65 +589,76 @@ export class CanvasController {
 
     deleteCollidedLines(p: Vector2) {
 
-        for (const line of this.staticLines.values()) {
-            if (line.pointCollision(p)) {
-                this.toDelete.push(line);
+        for (const layer of this.staticLines) {
+            for (const line of layer.values()) {
+                if (line.pointCollision(p)) {
+                    this.toDelete.push(line);
+                }
             }
         }
 
         for (const line of this.toDelete) {
-            this.staticLines.delete(line.id);
-
-            // queue the item to be deleted in db
-            this.firebaseController.deletionQueue.push(line.id);
+            this.staticLines[line.layer].delete(line.id);
         }
 
         if (this.toDelete.length > 0) {
             this.needStaticRender = true;
         }
 
-        // TODO broadcast delete message
-
-        // TODO delete in firebase
     }
 
     // ============ end events ============
 
-    renderStatic() {
-        if (!this.needStaticRender) {
-            return;
+    /**
+     * handles render of both static and dynamic rendering, in layers
+     */
+    render() {
+
+        // static
+        if (this.needStaticRender) {
+            this.ctxStatic.resetTransform();
+            this.ctxStatic.clearRect(0, 0, this.staticCanvas.width, this.staticCanvas.height);
+            this.ctxStatic.translate(-this.cameraPos.x, -this.cameraPos.y);
         }
 
-        const ctx = this.ctxStatic;
-        ctx.resetTransform();
-        ctx.clearRect(0, 0, this.staticCanvas.width, this.staticCanvas.height)
-        ctx.translate(-this.cameraPos.x, -this.cameraPos.y);
-
-        for (const line of this.staticLines.values()) {
-            line.render(ctx);
+        // dynamic
+        if (this.needDynamicRender) {
+            this.ctxDynamic.resetTransform();
+            this.ctxDynamic.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height);
+            this.ctxDynamic.translate(-this.cameraPos.x, -this.cameraPos.y);
         }
 
-        this.needStaticRender = false;
-    }
+        // optimization, don't render lines outside of view port
+        const camAABB = new AABB(this.cameraPos, this.cameraPos.addp(this.dynamicCanvas.width, this.dynamicCanvas.height));
 
-    renderDynamic() {
-        if (!this.needDynamicRender) {
-            return;
+
+        // process each layer
+        for (let layer = 0; layer < this.maxLayers; layer++) {
+
+            if (this.needDynamicRender) {
+                for (const line of this.dynamicLines[layer].values()) {
+                    line.render(this.ctxDynamic);
+                }
+            }
+
+            if (this.needStaticRender) {
+                for (const line of this.staticLines[layer].values()) {
+                    // skip out of view lines.
+                    if (camAABB.containsAABB(line.aabb)) {
+                        line.render(this.ctxStatic);
+                    }
+                }
+            }
+
         }
 
-        const ctx = this.ctxDynamic;
-        ctx.resetTransform();
-        ctx.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height)
-        ctx.translate(-this.cameraPos.x, -this.cameraPos.y);
 
-
-        for (const line of this.dynamicLines.values()) {
-            line.render(ctx);
-
-        }
-
+        // done
         this.needDynamicRender = false;
+        this.needStaticRender = false;
+
     }
+
 
     cleanup() {
         this.space?.unsubscribe();

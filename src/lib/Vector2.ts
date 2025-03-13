@@ -29,10 +29,10 @@ export class Vector2 {
         return [this.x, this.y];
     }
 
-    toObj(){
+    toObj() {
         return {
-            x:this.x,
-            y:this.y
+            x: this.x,
+            y: this.y
         }
     }
 
@@ -100,9 +100,27 @@ export class AABB {
         this.botright = botright;
     }
 
-    contains(point: Vector2) {
+    /**
+     * checks if a point is within this AABB (inclusive)
+     * @param point 
+     * @returns 
+     */
+    containsPoint(point: Vector2) {
         return (point.x >= this.topleft.x && point.y >= this.topleft.y && point.x <= this.botright.x && point.y <= this.botright.y);
     }
+
+    /**
+     * checks if this AABB fully contains the provide aabb. (inclusive)
+     * @param aabb 
+     */
+    containsAABB(aabb:AABB | undefined){
+        if(!aabb){
+            return false;
+        }
+        return this.containsPoint(aabb.topleft) && this.containsPoint(aabb.botright);
+    }
+    
+
 
     /**
      * expand this AABB inplace to contain the given point
