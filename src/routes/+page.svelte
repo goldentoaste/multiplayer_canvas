@@ -2,61 +2,59 @@
     import type { UserData } from "$lib/components/canvas/CanvasController.svelte";
     import MultiplayerCanvas from "$lib/components/canvas/MultiplayerCanvas.svelte";
     import ColorPicker from "$lib/components/colorpicker/ColorPicker.svelte";
+    import type { PenData } from "$lib/components/colorpicker/PenPicker.svelte";
+    import PenPicker from "$lib/components/colorpicker/PenPicker.svelte";
+    import UserInfo from "$lib/components/userInfo/UserInfo.svelte";
     import { onMount } from "svelte";
 
-    let userdata: UserData = $state({
-        username: "",
-        color: "black",
-        penColor: "black",
-        penThickness: 4,
+    let username = $state("");
+    let usercolor = $state("");
+
+    let selectedPen = $state("Pen");
+
+    let pendata: { [id: string]: PenData } = $state({
+        Pen: {
+            name: "Pen",
+            icon: "/pen.svg",
+            colors: ["#241e27"],
+            selectedColor: "#241e27",
+            layer: 1,
+            smooth: true,
+            sizes: [2, 4, 8, 12],
+            selectedSize: 4,
+        },
+        Brush: {
+            name: "Brush",
+            icon: "/brush.svg",
+            layer: 0,
+            colors: ["#FFC956", "#5656FF", "#FF5686", "#3BE8A3", "#CF56FF"],
+            selectedColor: "#FFC956",
+            selectedSize: 40,
+            sizes: [20, 40, 60],
+            smooth: false,
+        },
     });
 
-    $effect(() => {
-        if (userdata) {
-            localStorage.setItem("user", JSON.stringify(userdata));
-        }
-    });
-
-    onMount(() => {
-        if (localStorage.getItem("user")) {
-            userdata = JSON.parse(localStorage.getItem("user") ?? "{}") as UserData;
-        }
+    let userdata: UserData = $derived({
+        username,
+        color: usercolor,
+        penInfo: {
+            name: pendata[selectedPen]?.name,
+            layer: pendata[selectedPen]?.layer,
+            penColor: pendata[selectedPen]?.selectedColor,
+            penThickness: pendata[selectedPen]?.selectedSize,
+            smoothing: pendata[selectedPen]?.smooth,
+        },
     });
 </script>
 
 <h1>Canvas!</h1>
 
-<div class="contaienr">
-    <label for="name"
-        >Enter your name to continue: <input
-            id="name"
-            type="text"
-            bind:value={userdata.username}
-        /></label
-    >
-    <label for=""
-        >User color: <ColorPicker
-            colors={["#3730A3", "#166434", "#9A3412", "#B91C1B"]}
-            bind:selectedColor={userdata.color}
-        />
-    </label>
-
-    <label
-        >Pen thickness: <input
-            type="number"
-            defaultValue="4"
-            bind:value={userdata.penThickness}
-        /></label
-    >
-    <label for=""
-        >Pen color: <ColorPicker
-            colors={["#3730A3", "#166434", "#9A3412", "#B91C1B"]}
-            bind:selectedColor={userdata.penColor}
-        />
-    </label>
+<div class="container">
+    <UserInfo bind:username bind:color={usercolor} />
+    <PenPicker pens={Object.values(pendata)} bind:selectedPen />
+    <MultiplayerCanvas size={{ width: 1200, height: 800 }} {userdata} maxLayers={2} />
 </div>
-
-<MultiplayerCanvas size={{ width: 1200, height: 800 }} {userdata} />
 
 <p>Some instructions</p>
 <ul>
@@ -70,7 +68,7 @@
 </ul>
 
 <style>
-    .contaienr {
+    .container {
         display: flex;
         flex-direction: column;
         gap: 0.25rem;

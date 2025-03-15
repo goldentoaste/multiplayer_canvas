@@ -32,7 +32,7 @@ export interface CursorInfo {
     }
 }
 
-export async function joinSpace(username: string | undefined, onCursorUpdate: (cursorEvent: CursorUpdate) => void, deleteEvent: (idsToDelete: string[]) => void, lineFinishEvent: (line: SerializedLineType) => void) {
+export async function joinSpace(username: string | undefined, onCursorUpdate: (cursorEvent: CursorUpdate) => void, deleteEvent: (idsToDelete: string[]) => void, lineFinishEvent: (userId:string, line: SerializedLineType) => void) {
     // const clientId = localStorage.getItem("clientId") ?? crypto.randomUUID();
     // localStorage.setItem("clientId", clientId)
     const clientId = crypto.randomUUID();
@@ -42,11 +42,11 @@ export async function joinSpace(username: string | undefined, onCursorUpdate: (c
     });
     const spaces = new Spaces(realtimeClient);
 
-    const canvasSpace = await spaces.get("canvas", { cursors: { paginationLimit: 0, outboundBatchInterval: 20 }, offlineTimeout: 10, },);
+    const canvasSpace = await spaces.get("canvas", { cursors: { paginationLimit: 0, outboundBatchInterval: 0 }, offlineTimeout: 10, },);
 
 
     const user: UserType = {
-        id: crypto.randomUUID(),
+        id: clientId,
         color: randomColor(),
         username: username ?? ""
     }
@@ -56,11 +56,12 @@ export async function joinSpace(username: string | undefined, onCursorUpdate: (c
     canvasSpace.cursors.subscribe("update", (e) => {
         if (e.clientId !== clientId) {
             onCursorUpdate(e);
+          
         }
     });
 
     // delete
-    const canvasChannel = realtimeClient.channels.get("canvas",);
+    const canvasChannel = realtimeClient.channels.get("canvas");
 
     // delete event
     canvasChannel.subscribe("deleteLines", (e) => {
@@ -68,7 +69,7 @@ export async function joinSpace(username: string | undefined, onCursorUpdate: (c
     });
 
     canvasChannel.subscribe("newLine", (e) => {
-        lineFinishEvent(e.data as SerializedLineType);
+        lineFinishEvent(e.clientId ?? "", e.data as SerializedLineType);
     })
 
 
@@ -90,6 +91,7 @@ export async function joinSpace(username: string | undefined, onCursorUpdate: (c
             if (!user || !user.username || user.username.length === 0) {
                 return;
             }
+
             canvasSpace.cursors.set({
                 position: {
                     x, y

@@ -30,8 +30,9 @@ export class CanvasFirebaseController {
                     id: line.id,
                     color: line.color,
                     thickness: line.thickness,
-                    points: line.points.map(item => [item.x, item.y])
-                })
+                    points: line.points.map(item => [item.x, item.y]),
+                    layer: line.layer
+                }, true)
             )
         }
 
@@ -45,7 +46,6 @@ export class CanvasFirebaseController {
             return;
         }
 
-    
         this.lastUpdateTime = t;
 
         if (this.additionQueue.length > 0) {
@@ -56,7 +56,8 @@ export class CanvasFirebaseController {
                     color: item.color,
                     createdOn: Timestamp.now(),
                     thickness: item.thickness,
-                    points: item.points.map(p => p.toObj())
+                    points: item.points.map(p => p.toObj()),
+                    layer: item.layer
                 }
             }))
             this.additionQueue.length = 0;
@@ -67,9 +68,6 @@ export class CanvasFirebaseController {
             deleteLines(this.deletionQueue);
             this.deletionQueue.length = 0;
         }
-
-
-
     }
 
 

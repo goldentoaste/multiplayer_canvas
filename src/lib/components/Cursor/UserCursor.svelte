@@ -89,15 +89,13 @@
     .rainbow {
         animation: spinning infinite linear 0.75s backwards;
     }
-    .rainbow::before{
+    .rainbow::before {
         animation: rainbowAni infinite linear 1s;
     }
 
-    .rainbow::after{
+    .rainbow::after {
         animation: rainbowAni infinite linear 1s;
     }
-
-
 
     @keyframes rainbowAni {
         0% {
@@ -114,12 +112,12 @@
     @keyframes spinning {
         0% {
             transform-origin: top left;
-            transform:  rotate() ;
+            transform: rotate();
         }
 
         100% {
             transform-origin: top left;
-            transform:  rotate(360deg) ;
+            transform: rotate(360deg);
         }
     }
 </style>

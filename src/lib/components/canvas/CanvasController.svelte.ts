@@ -15,7 +15,6 @@ export interface PenInfo {
     penThickness: number,
     layer: number,
     smoothing: boolean,
-    icon?: string,
     name?: string
 }
 
@@ -177,7 +176,7 @@ export class Line {
 export class Cursor {
     id: string = $state("");
     username: string | undefined = $state();
-    color: string = $state("");
+    color: string = $state("black");
     pos: Vector2 = $state.raw(Vector2.ZERO);
     constructor(id: string, color: string, username: string | undefined, pos: Vector2) {
         this.id = id;
@@ -231,9 +230,9 @@ export class CanvasController {
     deleteMode = $state(false);
     toDelete: Line[] = [];
 
-
     firebaseController: CanvasFirebaseController;
 
+    deletedLines = new Set<string>();
 
     constructor(staticCanvas: HTMLCanvasElement, dynamicCanvas: HTMLCanvasElement, maxLayers: number) {
         this.staticCanvas = staticCanvas;
@@ -260,9 +259,13 @@ export class CanvasController {
             }
 
             if (this.space && this.selfCursor) {
+                console.log(this.userdata);
+
                 untrack(() => {
                     this.selfCursor!.username = this.userdata?.username;
                     this.selfCursor!.color = this.userdata?.color ?? "red";
+
+
                 })
 
             }
@@ -276,6 +279,10 @@ export class CanvasController {
         this.startRealTime();
         this.startRender();
 
+
+        setInterval(() => {
+            this.deletedLines.clear()
+        }, 10000)
     }
 
     // ============ Render loop ============
@@ -313,8 +320,8 @@ export class CanvasController {
                 this.space?.deleteLines(this.toDelete.map(item => item.id));
             }
 
-            for (const line in this.toDelete) {
-                this.firebaseController.deletionQueue.push(line);
+            for (const line of this.toDelete) {
+                this.firebaseController.deletionQueue.push(line.id);
             }
 
             // done, clear deletes
@@ -331,7 +338,7 @@ export class CanvasController {
 
         // lines from db.
         for (const line of lines) {
-            this.staticLines[line.layer].set(line.id, line);
+            this.staticLines[line.layer]?.set(line.id, line);
         }
 
         // render
@@ -344,6 +351,7 @@ export class CanvasController {
         }
 
         const user = e.data.user as { id: string, username: string, color: string };
+
         if (user.id === this.selfCursor?.id) {
             return; // ignore own data to avoid overhead
         }
@@ -358,7 +366,13 @@ export class CanvasController {
         this.othersCursors = this.othersCursors;
 
         if (currentLine) {
-            this.dynamicLines[currentLine.layer].set(user.id, Line.deserialize(currentLine));
+
+            if (!this.deletedLines.has(currentLine.id)) {
+                this.dynamicLines[currentLine.layer].set(user.id, Line.deserialize(currentLine));
+            }
+            else {
+                this.dynamicLines[currentLine.layer].delete(user.id);
+            }
         }
 
         this.needDynamicRender = true;
@@ -374,12 +388,13 @@ export class CanvasController {
         this.needStaticRender = true;
     }
 
-    handleNewLine(newLine: SerializedLineType) {
+    handleNewLine(userId: string, newLine: SerializedLineType) {
         this.needStaticRender = true;
         const line = Line.deserialize(newLine, true);
         this.staticLines[line.layer].set(line.id, line);
-        this.dynamicLines[line.layer].delete(line.id);
+        this.dynamicLines[line.layer].delete(userId);
 
+        this.deletedLines.add(newLine.id);
     }
 
 
@@ -398,6 +413,8 @@ export class CanvasController {
     }
 
     initEvents() {
+        
+
         this.dynamicCanvas.addEventListener("mousemove", (e) => {
             const event: SimplePointerEvent = {
                 x: e.offsetX,
@@ -408,12 +425,17 @@ export class CanvasController {
 
                 buttons: e.buttons
             }
+
             if (e.buttons === 0) {
                 this.mouseHover(event);
             }
             else if (e.buttons === 1) {
-                this.mouseDrag(event);
-            } else if (e.buttons === 4) {
+                if (!this.userdata?.penInfo.name) {
+                    this.mousepan(event)
+                } else {
+                    this.mouseDrag(event);
+                }
+            } else if (e.buttons === 2) {
                 this.mousepan(event)
             }
         })
@@ -539,7 +561,11 @@ export class CanvasController {
         this.staticLines[this.currentLine.layer].set(this.currentLine.id, this.currentLine);
         this.dynamicLines[this.currentLine.layer].delete(this.currentLine.id);
 
+        const line = this.currentLine;
+
         // broadcast new line to other realtime clients
+        this.space?.newLine(line.serialize());
+
 
         // queue the item to be uploaded
         this.firebaseController.additionQueue.push(this.currentLine);
@@ -593,6 +619,7 @@ export class CanvasController {
             for (const line of layer.values()) {
                 if (line.pointCollision(p)) {
                     this.toDelete.push(line);
+
                 }
             }
         }
@@ -632,29 +659,40 @@ export class CanvasController {
         const camAABB = new AABB(this.cameraPos, this.cameraPos.addp(this.dynamicCanvas.width, this.dynamicCanvas.height));
 
 
+        let needDynamicAgain = false;
+
         // process each layer
         for (let layer = 0; layer < this.maxLayers; layer++) {
 
-            if (this.needDynamicRender) {
-                for (const line of this.dynamicLines[layer].values()) {
-                    line.render(this.ctxDynamic);
-                }
-            }
 
             if (this.needStaticRender) {
                 for (const line of this.staticLines[layer].values()) {
                     // skip out of view lines.
-                    if (camAABB.containsAABB(line.aabb)) {
+                    if (camAABB.cornerContain(line.aabb)) {
                         line.render(this.ctxStatic);
                     }
                 }
             }
 
+            if (this.needDynamicRender) {
+                for (const [id, line] of this.dynamicLines[layer].entries()) {
+                    line.render(this.ctxDynamic);
+
+                    if (this.deletedLines.has(line.id)) {
+                        needDynamicAgain = true;
+                        this.dynamicLines[layer].delete(id)
+                    }
+                }
+
+            }
+
+
         }
 
 
         // done
-        this.needDynamicRender = false;
+        this.needDynamicRender = false || needDynamicAgain;
+
         this.needStaticRender = false;
 
     }

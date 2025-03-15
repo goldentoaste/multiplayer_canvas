@@ -86,6 +86,10 @@ export class Vector2 {
     clone() {
         return new Vector2(this.x, this.y);
     }
+
+    toString(){
+        return `Vector2(${this.x}, ${this.y})`
+    }
 }
 
 
@@ -98,6 +102,10 @@ export class AABB {
     constructor(topleft: Vector2, botright: Vector2) {
         this.topleft = topleft;
         this.botright = botright;
+    }
+
+    toString(){
+        return `AABB(${this.topleft.toString()}, ${this.botright.toString()})`
     }
 
     /**
@@ -116,8 +124,16 @@ export class AABB {
     containsAABB(aabb:AABB | undefined){
         if(!aabb){
             return false;
-        }
+        } // TODO this implementation is wrong
         return this.containsPoint(aabb.topleft) && this.containsPoint(aabb.botright);
+    }
+
+    cornerContain(aabb:AABB | undefined){
+        if(!aabb){
+            return false;
+        }
+        return this.containsPoint(aabb.topleft) || this.containsPoint(aabb.botright);
+
     }
     
 

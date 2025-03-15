@@ -1,32 +1,40 @@
 <script lang="ts" generics="T">
+    import type { Snippet } from "svelte";
+
     export interface PickerProp<T> {
         items: {
             name: string; // also used as backup display, must be unique
             data: T; // internal representation
             icon?: string; // path to icon}
         }[];
-        selectedItem?: string; // internal rep of the currently selected item
+        selectedItem?: { name: string; data: T } | undefined; // internal rep of the currently selected item
+        snippet?: Snippet<[T]>;
     }
 
-    let { items, selectedItem = $bindable("") }: PickerProp<T> = $props();
+    let { items, snippet, selectedItem = $bindable() }: PickerProp<T> = $props();
 </script>
 
 <div class="pickerContainer">
     {#each items as item (item.name)}
         <button
             class="pickerItem"
-            class:selected={item.name == selectedItem}
+            class:selected={item.name == selectedItem?.name}
             onclick={() => {
-                if (selectedItem == item.name) {
-                    selectedItem = ""; // empty as default value
+                if (selectedItem?.name == item.name) {
+                    selectedItem = undefined; // empty as default value
                 } else {
-                    selectedItem = item.name;
+                    selectedItem = {
+                        data: item.data,
+                        name: item.name,
+                    };
                 }
             }}
             title={item.name}
         >
             {#if item.icon}
-                <img src={item.icon} alt={item.name} />
+                <img class="icon" src={item.icon} alt={item.name} />
+            {:else if snippet}
+                {@render snippet(item.data)}
             {:else}
                 <span>{item.name}</span>
             {/if}
@@ -35,6 +43,10 @@
 </div>
 
 <style>
+
+    .icon {
+        width: 1rem;
+    }
     .pickerContainer {
         display: flex;
         flex-direction: row;
@@ -44,6 +56,8 @@
     .pickerItem {
         /* place holder */
         margin: 0.25rem;
+        background:none;
+        border: none;
     }
 
     .pickerItem.selected {

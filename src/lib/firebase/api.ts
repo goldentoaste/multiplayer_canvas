@@ -7,6 +7,7 @@ export interface FirebaseLine{
     color:string;
     createdOn: Timestamp;
     thickness:number;
+    layer:number,
     points: {x:number, y:number}[]
 }
 

@@ -33,6 +33,18 @@
             // canvasController.cleanup();
         }
     });
+
+    let container: HTMLDivElement | undefined = $state();
+
+    $effect(() => {
+        if (container) {
+            container.addEventListener("contextmenu", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            });
+        }
+    });
 </script>
 
 <span>Delete mode: {canvasController?.deleteMode}</span>
@@ -42,6 +54,7 @@
     }}>toggle delete</button
 >
 <div
+    bind:this={container}
     class="canvasContainer"
     style={`${style ?? ""} ${size ? `width: ${size.width}px; height: ${size.height}px;` : ""}`}
 >

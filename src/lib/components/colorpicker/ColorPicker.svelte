@@ -2,36 +2,49 @@
     interface Props {
         colors: string[];
         selectedColor: string;
+        allowDeselect?: boolean;
+        allowCustom?: boolean;
     }
 
-    let { colors, selectedColor = $bindable("black") }: Props = $props();
+    let {
+        colors,
+        selectedColor = $bindable("black"),
+        allowDeselect = false,
+        allowCustom = false,
+    }: Props = $props();
 </script>
 
 <div class="colorContainer">
     {#each colors as color}
         <button
             class="colorItem"
-            style="--color:{color}"
             class:selected={selectedColor === color}
-            onclick={() => {
+            style="--color:{color}"
+            onclick={(e) => {
+              
                 if (selectedColor === color) {
+                    if (!allowDeselect) {
+                        return;
+                    }
                     selectedColor = "black";
                 } else {
                     selectedColor = color;
+                 
                 }
             }}
         ></button>
     {/each}
-
-    <span
-        >Custom color:
-        <input
-            type="color"
-            onchange={(e) => {
-                selectedColor = (e.target as HTMLInputElement).value;
-            }}
-        /></span
-    >
+    {#if allowCustom}
+        <span
+            >Custom color:
+            <input
+                type="color"
+                onchange={(e) => {
+                    selectedColor = (e.target as HTMLInputElement).value;
+                }}
+            /></span
+        >
+    {/if}
 </div>
 
 <style>
@@ -41,6 +54,8 @@
 
         gap: 0.5rem;
         align-items: center;
+        width: fit-content;
+        margin: 0.5rem;
     }
 
     .colorItem {

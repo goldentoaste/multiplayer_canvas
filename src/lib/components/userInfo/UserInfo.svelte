@@ -33,12 +33,12 @@
 </script>
 
 <div>
-    <label>Username: <input type="text" bind:value={username} /></label>
-    <label
+    <div>Username: <input type="text" bind:value={username} /></div>
+    <div
         >User color: <ColorPicker
             colors={["#9de19a", "#a4c5ea", "#bca9e1", "#e7eca3", "#98a7f2"]}
             bind:selectedColor={color}
-        /></label
+        /></div
     >
 </div>
 
