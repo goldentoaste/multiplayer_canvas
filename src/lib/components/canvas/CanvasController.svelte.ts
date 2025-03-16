@@ -1,6 +1,6 @@
 import { CanvasFirebaseController } from "$lib/firebase/CanvasFirebaseController";
 import { joinSpace } from "$lib/realtime/space.svelte";
-import { AABB, pointDistanceToLineSegment, Vector2 } from "$lib/Vector2";
+import { AABB, lerp, pointDistanceToLineSegment, Vector2 } from "$lib/Vector2";
 import type { CursorData, CursorUpdate } from "@ably/spaces";
 import { untrack } from "svelte";
 
@@ -202,8 +202,10 @@ export class CanvasController {
     staticCanvas: HTMLCanvasElement;
     dynamicCanvas: HTMLCanvasElement;
 
-    cameraPos: Vector2;
-    cameraZoom: number = 1;
+    cameraPos: Vector2; // used for logic
+    smoothCameraPos: Vector2; // used for rendering only
+    zoom: number = 1;
+    smoothZoom: number = 1; // for rendering
 
     maxLayers: number;
     staticLines: Map<string, Line>[]; // lines that is already drawn, to be rendered on initial load, into canvas buffer
@@ -240,6 +242,7 @@ export class CanvasController {
         this.maxLayers = maxLayers;
 
         this.cameraPos = Vector2.ZERO;
+        this.smoothCameraPos = Vector2.ZERO;
 
         this.staticLines = [];
         this.dynamicLines = []; // TODO, fetch from db
@@ -264,7 +267,6 @@ export class CanvasController {
                 untrack(() => {
                     this.selfCursor!.username = this.userdata?.username;
                     this.selfCursor!.color = this.userdata?.color ?? "red";
-
 
                 })
 
@@ -295,7 +297,7 @@ export class CanvasController {
 
         this.firebaseController.update(t);
         this.finalizeDeletedLines();
-
+        this.updateSmoothPos();
         this.render(); // checks and redners both static and dynamic lines
 
         // do things
@@ -308,9 +310,6 @@ export class CanvasController {
             this.lastFrameTime = t;
         }
     }
-
-
-    // ============ End Render loop ============
 
     finalizeDeletedLines() {
         if (this.deltaTime >= this.cursorUpdateThreshold) {
@@ -330,7 +329,124 @@ export class CanvasController {
     }
 
 
+
+    updateSmoothPos() {
+        const smoothFactor = 0.7
+        this.smoothCameraPos = Vector2.lerp(this.smoothCameraPos, this.cameraPos, smoothFactor);
+        this.smoothZoom = lerp(this.smoothZoom, this.zoom, smoothFactor);
+    }
+
+    // ============ End Render loop ============
+
+
+
     // ============ events ============
+
+    lastPos : Vector2 | undefined;
+    initEvents() {
+        this.dynamicCanvas.addEventListener("mousemove", (e) => {
+            const event: SimplePointerEvent = {
+                x: e.offsetX,
+                y: e.offsetY,
+
+                dx: e.movementX,
+                dy: e.movementY,
+
+                buttons: e.buttons
+            }
+
+            if (e.buttons === 0) {
+                this.mouseHover(event);
+            }
+            else if (e.buttons === 1) {
+                if (!this.userdata?.penInfo.name) {
+                    this.mousepan(event)
+                } else {
+                    this.mouseDrag(event);
+                }
+            } else if (e.buttons === 2) {
+                this.mousepan(event)
+            }
+        })
+
+        this.dynamicCanvas.addEventListener("mouseup", (e) => {
+            const event: SimplePointerEvent = {
+                x: e.offsetX,
+                y: e.offsetY,
+
+                dx: e.movementX,
+                dy: e.movementY,
+
+                buttons: e.buttons
+            }
+            this.mouseup(event);
+        });
+
+
+
+        // touch related
+        this.dynamicCanvas.addEventListener("touchstart", (e) => {
+            const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+
+            if (e.touches.length == 1) {
+                const t = e.touches[0];
+                this.lastPos = new Vector2(t.clientX - rect.left, t.clientY - rect.top)
+            }
+
+            else if (e.touches.length == 2){
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+                this.lastPos = Vector2.midPoint(
+                    new Vector2(t1.clientX - rect.left, t1.clientY - rect.top),
+                    new Vector2(t2.clientX - rect.left, t2. clientY - rect.top)
+                )
+            }
+        })
+
+
+        this.dynamicCanvas.addEventListener("touchmove", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+            
+            let event: SimplePointerEvent | undefined;
+
+            if(e.touches.length == 1){
+                // one finger only move
+                const _x = e.touches[0].clientX - rect.left;
+                const _y = e.touches[0].clientY - rect.top;
+                
+                event = {
+                    buttons: -1,
+                    dx:-1,
+                    dy:-1,
+                    x:_x,
+                    y:_y
+                }
+                this.mouseDrag(event);
+
+                this.lastPos = new Vector2(_x, _y);
+            }
+
+        })
+
+        this.dynamicCanvas.addEventListener("touchend", (e) => {
+            if (e.touches.length == 0) {
+                this.mouseup({
+                    x: this.lastX ?? -9999,
+                    y: this.lastY ?? -9999,
+                    buttons: -1,
+                    dx: 0,
+                    dy: 0
+                })
+            }
+
+        })
+    }
+
+
+
 
 
     async startStorage() {
@@ -412,114 +528,6 @@ export class CanvasController {
         })
     }
 
-    initEvents() {
-        
-
-        this.dynamicCanvas.addEventListener("mousemove", (e) => {
-            const event: SimplePointerEvent = {
-                x: e.offsetX,
-                y: e.offsetY,
-
-                dx: e.movementX,
-                dy: e.movementY,
-
-                buttons: e.buttons
-            }
-
-            if (e.buttons === 0) {
-                this.mouseHover(event);
-            }
-            else if (e.buttons === 1) {
-                if (!this.userdata?.penInfo.name) {
-                    this.mousepan(event)
-                } else {
-                    this.mouseDrag(event);
-                }
-            } else if (e.buttons === 2) {
-                this.mousepan(event)
-            }
-        })
-
-        this.dynamicCanvas.addEventListener("mouseup", (e) => {
-            const event: SimplePointerEvent = {
-                x: e.offsetX,
-                y: e.offsetY,
-
-                dx: e.movementX,
-                dy: e.movementY,
-
-                buttons: e.buttons
-            }
-            this.mouseup(event);
-        });
-
-
-
-        // touch related
-        this.dynamicCanvas.addEventListener("touchstart", (e) => {
-            if (e.touches.length == 1) {
-                const t = e.touches[0];
-                const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                this.lastX = t.clientX - rect.left;
-                this.lastY = t.clientY - rect.top;
-            }
-        })
-
-
-        this.dynamicCanvas.addEventListener("touchmove", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-            let t: Touch | undefined;
-            let event: SimplePointerEvent | undefined;
-
-            if (e.touches.length > 0) {
-                t = e.touches[0];
-                event = {
-                    x: t.clientX - rect.left,
-                    y: t.clientY - rect.top,
-                    buttons: -1, // touch doesn't have buttons
-                    dx: -9999, dy: -9999
-                };
-
-                if (this.lastX === -9999) {
-                    event.dx = 0;
-                    event.dy = 0;
-                } else {
-                    event.dx = (event.x - this.lastX);
-                    event.dy = (event.y - this.lastY);
-                }
-            }
-
-            if (e.touches.length == 1) {
-                this.mouseDrag(event!);
-            }
-            else if (e.touches.length == 2) {
-
-                this.mousepan(event!);
-            }
-
-            this.lastX = event?.x ?? -9999;
-            this.lastY = event?.y ?? -9999;
-        })
-
-        this.dynamicCanvas.addEventListener("touchend", (e) => {
-            if (e.touches.length == 0) {
-                this.mouseup({
-                    x: this.lastX ?? -9999,
-                    y: this.lastY ?? -9999,
-                    buttons: -1,
-                    dx: 0,
-                    dy: 0
-                })
-            }
-
-        })
-    }
-
-    lastX = -9999;
-    lastY = -9999;
 
 
 

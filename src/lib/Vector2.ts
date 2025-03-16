@@ -1,3 +1,9 @@
+
+
+export function lerp(a: number, b: number, t: number) {
+    return a + t * (b - a);
+}
+
 export class Vector2 {
 
     x: number;
@@ -7,6 +13,27 @@ export class Vector2 {
     constructor(x: number, y: number) {
         this.x = x;
         this.y = y;
+    }
+
+    static lerp(v1: Vector2, v2: Vector2, t: number) {
+        return new Vector2(
+            lerp(v1.x, v2.x, t),
+            lerp(v1.y, v2.y, t)
+        );
+    }
+
+    /**
+     * returns the mid point between the 2 vectors.
+     * Same as lerp(v1, v2, 0.5);
+     * @param v1 
+     * @param v2 
+     * @returns 
+     */
+    static midPoint(v1 :Vector2, v2: Vector2){
+        return new Vector2(
+            (v1.x + v2.x) / 2,
+            (v1.y + v2.y) / 2
+        )
     }
 
     static get ZERO() {
@@ -87,15 +114,13 @@ export class Vector2 {
         return new Vector2(this.x, this.y);
     }
 
-    toString(){
+    toString() {
         return `Vector2(${this.x}, ${this.y})`
     }
 }
 
 
 export class AABB {
-
-
     topleft: Vector2;
     botright: Vector2;
 
@@ -104,7 +129,7 @@ export class AABB {
         this.botright = botright;
     }
 
-    toString(){
+    toString() {
         return `AABB(${this.topleft.toString()}, ${this.botright.toString()})`
     }
 
@@ -121,21 +146,21 @@ export class AABB {
      * checks if this AABB fully contains the provide aabb. (inclusive)
      * @param aabb 
      */
-    containsAABB(aabb:AABB | undefined){
-        if(!aabb){
+    containsAABB(aabb: AABB | undefined) {
+        if (!aabb) {
             return false;
         } // TODO this implementation is wrong
         return this.containsPoint(aabb.topleft) && this.containsPoint(aabb.botright);
     }
 
-    cornerContain(aabb:AABB | undefined){
-        if(!aabb){
+    cornerContain(aabb: AABB | undefined) {
+        if (!aabb) {
             return false;
         }
         return this.containsPoint(aabb.topleft) || this.containsPoint(aabb.botright);
 
     }
-    
+
 
 
     /**
