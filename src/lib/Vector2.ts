@@ -4,6 +4,30 @@ export function lerp(a: number, b: number, t: number) {
     return a + t * (b - a);
 }
 
+/**
+ * convert point from global space to screen space.
+ */
+export function toScreenSpace(point: Vector2, camPos: Vector2, scale: number) {
+    return point.sub(camPos).mul(scale); // cam pos is not affected by scale
+}
+
+/**
+ * convert from screen space to global space
+ */
+export function toGlobalSpace(point: Vector2, camPos: Vector2, scale: number) {
+    return point.div(scale).sub(camPos); // reverse operations done in toScreenSpace()
+}
+
+/**
+ * Get AABB that is the view port, aka the area the camera can currently see.
+ * Used for rendering optimizations.
+ * @param camPos 
+ */
+export function camGlobalAABB(camPos:Vector2, originalWidth:number, originalHeight:number, scale:number){
+    // again, cam location is not affected by scale.
+    return new AABB(camPos, new Vector2(originalWidth / scale, originalHeight / scale));
+}
+
 export class Vector2 {
 
     x: number;
@@ -29,7 +53,7 @@ export class Vector2 {
      * @param v2 
      * @returns 
      */
-    static midPoint(v1 :Vector2, v2: Vector2){
+    static midPoint(v1: Vector2, v2: Vector2) {
         return new Vector2(
             (v1.x + v2.x) / 2,
             (v1.y + v2.y) / 2
@@ -100,6 +124,10 @@ export class Vector2 {
 
     mul(factor: number) {
         return new Vector2(this.x * factor, this.y * factor);
+    }
+
+    div(quotient: number) {
+        return new Vector2(this.x / quotient, this.y / quotient);
     }
 
     mag() {

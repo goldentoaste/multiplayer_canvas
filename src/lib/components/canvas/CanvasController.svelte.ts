@@ -342,7 +342,8 @@ export class CanvasController {
 
     // ============ events ============
 
-    lastPos : Vector2 | undefined;
+    lastPos: Vector2 | undefined;
+    initialTouchDist = 0;
     initEvents() {
         this.dynamicCanvas.addEventListener("mousemove", (e) => {
             const event: SimplePointerEvent = {
@@ -393,13 +394,15 @@ export class CanvasController {
                 this.lastPos = new Vector2(t.clientX - rect.left, t.clientY - rect.top)
             }
 
-            else if (e.touches.length == 2){
+            else if (e.touches.length == 2) {
                 const t1 = e.touches[0];
                 const t2 = e.touches[1];
-                this.lastPos = Vector2.midPoint(
-                    new Vector2(t1.clientX - rect.left, t1.clientY - rect.top),
-                    new Vector2(t2.clientX - rect.left, t2. clientY - rect.top)
-                )
+
+                const v1 = new Vector2(t1.clientX - rect.left, t1.clientY - rect.top);
+                const v2 = new Vector2(t2.clientX - rect.left, t2.clientY - rect.top);
+                this.lastPos = Vector2.midPoint(v1, v2)
+                this.initialTouchDist = v1.distTo(v2);
+
             }
         })
 
@@ -408,25 +411,50 @@ export class CanvasController {
             e.preventDefault();
             e.stopPropagation();
 
+            if (!this.lastPos) {
+                return;
+            }
+
             const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-            
+
             let event: SimplePointerEvent | undefined;
 
-            if(e.touches.length == 1){
+            if (e.touches.length == 1) {
                 // one finger only move
                 const _x = e.touches[0].clientX - rect.left;
                 const _y = e.touches[0].clientY - rect.top;
-                
+
                 event = {
                     buttons: -1,
-                    dx:-1,
-                    dy:-1,
-                    x:_x,
-                    y:_y
+                    dx: -1,
+                    dy: -1,
+                    x: _x,
+                    y: _y
                 }
                 this.mouseDrag(event);
 
                 this.lastPos = new Vector2(_x, _y);
+            }
+            else if (e.touches.length == 2) {
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+                const v1 = new Vector2(t1.clientX - rect.left, t1.clientY - rect.top);
+                const v2 = new Vector2(t2.clientX - rect.left, t2.clientY - rect.top);
+
+                const currentPos = Vector2.midPoint(v1, v2);
+                const diff = currentPos.sub(this.lastPos);
+
+                this.lastPos = currentPos;
+
+                event = {
+                    buttons: -1,
+                    dx: diff.x,
+                    dy: diff.y,
+                    x: currentPos.x,
+                    y: currentPos.y,
+                }
+
+                this.mousepan(event);
             }
 
         })
@@ -434,12 +462,15 @@ export class CanvasController {
         this.dynamicCanvas.addEventListener("touchend", (e) => {
             if (e.touches.length == 0) {
                 this.mouseup({
-                    x: this.lastX ?? -9999,
-                    y: this.lastY ?? -9999,
+                    x: 0,
+                    y: 0,
                     buttons: -1,
                     dx: 0,
                     dy: 0
                 })
+                // clean up
+                this.lastPos = undefined;
+                this.initialTouchDist = 0;
             }
 
         })
@@ -622,7 +653,6 @@ export class CanvasController {
 
 
     deleteCollidedLines(p: Vector2) {
-
         for (const layer of this.staticLines) {
             for (const line of layer.values()) {
                 if (line.pointCollision(p)) {
@@ -648,7 +678,6 @@ export class CanvasController {
      * handles render of both static and dynamic rendering, in layers
      */
     render() {
-
         // static
         if (this.needStaticRender) {
             this.ctxStatic.resetTransform();
@@ -666,13 +695,10 @@ export class CanvasController {
         // optimization, don't render lines outside of view port
         const camAABB = new AABB(this.cameraPos, this.cameraPos.addp(this.dynamicCanvas.width, this.dynamicCanvas.height));
 
-
         let needDynamicAgain = false;
 
         // process each layer
         for (let layer = 0; layer < this.maxLayers; layer++) {
-
-
             if (this.needStaticRender) {
                 for (const line of this.staticLines[layer].values()) {
                     // skip out of view lines.
@@ -694,9 +720,7 @@ export class CanvasController {
 
             }
 
-
         }
-
 
         // done
         this.needDynamicRender = false || needDynamicAgain;
