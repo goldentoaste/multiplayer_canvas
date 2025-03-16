@@ -1,6 +1,6 @@
 import { CanvasFirebaseController } from "$lib/firebase/CanvasFirebaseController";
 import { joinSpace } from "$lib/realtime/space.svelte";
-import { AABB, lerp, pointDistanceToLineSegment, Vector2 } from "$lib/Vector2";
+import { AABB, camGlobalAABB, lerp, pointDistanceToLineSegment, Vector2 } from "$lib/Vector2";
 import type { CursorData, CursorUpdate } from "@ably/spaces";
 import { untrack } from "svelte";
 
@@ -68,6 +68,14 @@ export class Line {
         }
 
         ctx.stroke(); // done!
+
+
+        // for drawing debug AABB
+        // if(this.aabb){
+        //     ctx.lineWidth = 3;
+        //     ctx.strokeStyle = "red";
+        //     ctx.strokeRect(this.aabb.x, this.aabb.y, this.aabb.width, this.aabb.height);
+        // }
     }
 
 
@@ -133,6 +141,11 @@ export class Line {
         for (const p of this.points) {
             this.aabb.expandToContain(p);
         }
+
+        // expand aabb to fit line thickness, extra margin to be generous
+        this.aabb.nudgeTopLeftp(-this.thickness * 1, -this.thickness * 1);
+        this.aabb.nudgeBotRightp(this.thickness * 1, this.thickness * 1);
+
     }
 
 
@@ -151,11 +164,16 @@ export class Line {
 
         for (let i = 1; i < this.points.length; i++) {
             const tangentDist = pointDistanceToLineSegment(prev, this.points[i], p0);
-            const segmentDist = this.points[i].distTo(prev) + this.thickness * 2;
+            const segmentDist = this.points[i].distTo(prev) + this.thickness / 2;
+
+            const d1 = prev.distTo(p0) < segmentDist;
+            const d2 = this.points[i].distTo(p0) < segmentDist;
+            const t = tangentDist < this.thickness + 1;
 
             // point dist to line is less than limit
             // also check that p0 is sorta "between" the line segment points.
-            if (tangentDist < (this.thickness + 1) && prev.distTo(p0) < segmentDist && this.points[i].distTo(p0) < segmentDist) {
+            if (d1 || d2 || (t && d1 && d2)) {
+
                 return true;
             }
             prev = this.points[i];
@@ -283,7 +301,7 @@ export class CanvasController {
 
 
         setInterval(() => {
-            this.deletedLines.clear()
+            this.deletedLines.clear();
         }, 10000)
     }
 
@@ -331,9 +349,15 @@ export class CanvasController {
 
 
     updateSmoothPos() {
-        const smoothFactor = 0.7
+        const smoothFactor = 0.1;
         this.smoothCameraPos = Vector2.lerp(this.smoothCameraPos, this.cameraPos, smoothFactor);
         this.smoothZoom = lerp(this.smoothZoom, this.zoom, smoothFactor);
+
+        // always render smooth movement isn't done yet.
+        if (this.smoothCameraPos.distTo(this.cameraPos) > 0.1 || Math.abs(this.smoothZoom - this.zoom) < 0.01) {
+            this.needDynamicRender = true;
+            this.needStaticRender = true;
+        }
     }
 
     // ============ End Render loop ============
@@ -345,6 +369,17 @@ export class CanvasController {
     lastPos: Vector2 | undefined;
     initialTouchDist = 0;
     initEvents() {
+
+        this.dynamicCanvas.addEventListener("keypress", (e) => {
+            if (e.key == "Equal") {
+                this.zoom = Math.min(2, this.zoom + 0.2);
+            }
+            else if (e.key == "Minus") {
+                this.zoom = Math.max(0.5, this.zoom - 0.2);
+            }
+        })
+
+
         this.dynamicCanvas.addEventListener("mousemove", (e) => {
             const event: SimplePointerEvent = {
                 x: e.offsetX,
@@ -682,18 +717,20 @@ export class CanvasController {
         if (this.needStaticRender) {
             this.ctxStatic.resetTransform();
             this.ctxStatic.clearRect(0, 0, this.staticCanvas.width, this.staticCanvas.height);
-            this.ctxStatic.translate(-this.cameraPos.x, -this.cameraPos.y);
+            this.ctxStatic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
+            this.ctxDynamic.scale(this.smoothZoom, this.smoothZoom);
         }
 
         // dynamic
         if (this.needDynamicRender) {
             this.ctxDynamic.resetTransform();
             this.ctxDynamic.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height);
-            this.ctxDynamic.translate(-this.cameraPos.x, -this.cameraPos.y);
+            this.ctxDynamic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
+            this.ctxDynamic.scale(this.smoothZoom, this.smoothZoom);
         }
 
         // optimization, don't render lines outside of view port
-        const camAABB = new AABB(this.cameraPos, this.cameraPos.addp(this.dynamicCanvas.width, this.dynamicCanvas.height));
+        const camAABB = camGlobalAABB(this.smoothCameraPos, this.dynamicCanvas.width, this.dynamicCanvas.height, this.smoothZoom);
 
         let needDynamicAgain = false;
 

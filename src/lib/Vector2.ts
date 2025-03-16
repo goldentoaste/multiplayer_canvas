@@ -23,9 +23,9 @@ export function toGlobalSpace(point: Vector2, camPos: Vector2, scale: number) {
  * Used for rendering optimizations.
  * @param camPos 
  */
-export function camGlobalAABB(camPos:Vector2, originalWidth:number, originalHeight:number, scale:number){
+export function camGlobalAABB(camPos: Vector2, originalWidth: number, originalHeight: number, scale: number) {
     // again, cam location is not affected by scale.
-    return new AABB(camPos, new Vector2(originalWidth / scale, originalHeight / scale));
+    return new AABB(camPos, camPos.add(new Vector2(originalWidth / scale, originalHeight / scale)));
 }
 
 export class Vector2 {
@@ -117,6 +117,16 @@ export class Vector2 {
     }
 
 
+    /**
+     * add in place, piece-wise
+     * @param x 
+     * @param y 
+     */
+    addip(x: number, y: number) {
+        this.x += x;
+        this.y += y;
+    }
+
     sub(other: Vector2) {
         return new Vector2(this.x - other.x, this.y - other.y);
     }
@@ -157,6 +167,14 @@ export class AABB {
         this.botright = botright;
     }
 
+    get topright() {
+        return new Vector2(this.botright.x, this.topleft.y);
+    }
+
+    get botleft() {
+        return new Vector2(this.topleft.x, this.botright.y);
+    }
+
     toString() {
         return `AABB(${this.topleft.toString()}, ${this.botright.toString()})`
     }
@@ -185,11 +203,23 @@ export class AABB {
         if (!aabb) {
             return false;
         }
-        return this.containsPoint(aabb.topleft) || this.containsPoint(aabb.botright);
+        return this.containsPoint(aabb.topleft) || this.containsPoint(aabb.botright) || this.containsPoint(this.botleft) || this.containsPoint(this.topright);
 
     }
 
+    nudgeTopLeft(diff: Vector2) {
+        this.topleft.addi(diff);
+    }
+    nudgeTopLeftp(x: number, y: number) {
+        this.topleft.addip(x, y);
+    }
 
+    nudgeBotRight(diff: Vector2) {
+        this.botright.addi(diff);
+    }
+    nudgeBotRightp(x: number, y: number) {
+        this.botright.addip(x, y);
+    }
 
     /**
      * expand this AABB inplace to contain the given point
