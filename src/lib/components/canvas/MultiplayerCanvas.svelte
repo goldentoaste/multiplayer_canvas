@@ -69,6 +69,7 @@
         class="dynamicCanvas"
         width="{size?.width}px"
         height={size?.height}
+        tabindex="1"
     ></canvas>
     <div class="cursorContainer">
         {#if canvasController}

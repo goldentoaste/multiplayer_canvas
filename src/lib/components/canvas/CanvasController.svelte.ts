@@ -1,6 +1,6 @@
 import { CanvasFirebaseController } from "$lib/firebase/CanvasFirebaseController";
 import { joinSpace } from "$lib/realtime/space.svelte";
-import { AABB, camGlobalAABB, lerp, pointDistanceToLineSegment, Vector2 } from "$lib/Vector2";
+import { AABB, camGlobalAABB, lerp, pointDistanceToLineSegment, smoothstep, toGlobalSpace, toScreenSpace, Vector2 } from "$lib/Vector2";
 import type { CursorData, CursorUpdate } from "@ably/spaces";
 import { untrack } from "svelte";
 
@@ -280,8 +280,6 @@ export class CanvasController {
             }
 
             if (this.space && this.selfCursor) {
-                console.log(this.userdata);
-
                 untrack(() => {
                     this.selfCursor!.username = this.userdata?.username;
                     this.selfCursor!.color = this.userdata?.color ?? "red";
@@ -351,12 +349,14 @@ export class CanvasController {
     updateSmoothPos() {
         const smoothFactor = 0.1;
         this.smoothCameraPos = Vector2.lerp(this.smoothCameraPos, this.cameraPos, smoothFactor);
-        this.smoothZoom = lerp(this.smoothZoom, this.zoom, smoothFactor);
+        this.smoothZoom = smoothstep(this.smoothZoom, this.zoom, 0.15);
 
         // always render smooth movement isn't done yet.
-        if (this.smoothCameraPos.distTo(this.cameraPos) > 0.1 || Math.abs(this.smoothZoom - this.zoom) < 0.01) {
+        if (this.smoothCameraPos.distTo(this.cameraPos) > 0.1 || Math.abs(this.smoothZoom - this.zoom) > 0.0001) {
             this.needDynamicRender = true;
             this.needStaticRender = true;
+            console.log("??");
+            
         }
     }
 
@@ -369,14 +369,18 @@ export class CanvasController {
     lastPos: Vector2 | undefined;
     initialTouchDist = 0;
     initEvents() {
+        this.dynamicCanvas.addEventListener("keyup", (e) => {
 
-        this.dynamicCanvas.addEventListener("keypress", (e) => {
-            if (e.key == "Equal") {
+            if (e.key == "=") {
                 this.zoom = Math.min(2, this.zoom + 0.2);
+                this.needStaticRender = true;
+
             }
-            else if (e.key == "Minus") {
+            else if (e.key == "-") {
                 this.zoom = Math.max(0.5, this.zoom - 0.2);
+                this.needStaticRender = true;
             }
+
         })
 
 
@@ -512,9 +516,6 @@ export class CanvasController {
     }
 
 
-
-
-
     async startStorage() {
         const lines = await this.firebaseController.fullFetch();
 
@@ -542,7 +543,7 @@ export class CanvasController {
 
         this.othersCursors[user.id] = {
             ...user,
-            pos: new Vector2(e.position.x, e.position.y).sub(this.cameraPos)
+            pos: toScreenSpace(new Vector2(e.position.x, e.position.y), this.cameraPos, this.zoom)
         }
 
         this.othersCursors = this.othersCursors;
@@ -603,7 +604,8 @@ export class CanvasController {
         }
 
         if (force || this.deltaTime > this.cursorUpdateThreshold) {
-            this.space.updateCursor(e.x + this.cameraPos.x, e.y + this.cameraPos.y, {
+            const gp = toGlobalSpace(new Vector2(e.x, e.y), this.cameraPos, this.zoom);
+            this.space.updateCursor(gp.x, gp.y, {
                 username: this.userdata?.username,
                 color: this.selfCursor.color,
                 id: this.selfCursor.id
@@ -612,11 +614,10 @@ export class CanvasController {
     }
 
     mousepan(e: SimplePointerEvent) {
-        const diff = new Vector2(e.dx, e.dy);
+        const diff = new Vector2(e.dx, e.dy).div(this.zoom); // scale cam pos speed by zoom level
         this.cameraPos = this.cameraPos.sub(diff);
 
         if (this.selfCursor) {
-
             this.selfCursor.pos = this.selfCursor?.pos.add(diff);
         }
         Object.values(this.othersCursors).forEach(item => item.pos = item.pos.add(diff));
@@ -652,8 +653,9 @@ export class CanvasController {
     }
 
     mouseHover(e: SimplePointerEvent) {
-        if (this.selfCursor)
+        if (this.selfCursor) {
             this.selfCursor.pos = new Vector2(e.x, e.y);
+        }
         this.uploadCursorInfo(e);
     }
 
@@ -663,10 +665,11 @@ export class CanvasController {
 
         if (this.deleteMode) {
             // delete colliding lines
-            this.deleteCollidedLines(new Vector2(e.x, e.y).add(this.cameraPos));
+            this.deleteCollidedLines(toGlobalSpace(new Vector2(e.x, e.y), this.cameraPos, this.zoom));
 
-            if (this.selfCursor)
+            if (this.selfCursor) {
                 this.selfCursor.pos = new Vector2(e.x, e.y);
+            }
             return;
         }
 
@@ -674,11 +677,12 @@ export class CanvasController {
             this.currentLine = new Line(crypto.randomUUID(), this.userdata?.penInfo.penThickness ?? 4, this.userdata?.penInfo.penColor ?? "black", this.userdata?.penInfo.layer ?? 0, []);
         }
 
-        if (this.selfCursor)
+        if (this.selfCursor) {
             this.selfCursor.pos = new Vector2(e.x, e.y);
+        }
 
 
-        this.currentLine.appendPoint(new Vector2(e.x, e.y).add(this.cameraPos));
+        this.currentLine.appendPoint(toGlobalSpace(new Vector2(e.x, e.y), this.cameraPos, this.zoom));
         this.dynamicLines[this.currentLine.layer].set(this.currentLine.id, this.currentLine);
         this.needDynamicRender = true;
 
@@ -718,7 +722,7 @@ export class CanvasController {
             this.ctxStatic.resetTransform();
             this.ctxStatic.clearRect(0, 0, this.staticCanvas.width, this.staticCanvas.height);
             this.ctxStatic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
-            this.ctxDynamic.scale(this.smoothZoom, this.smoothZoom);
+            this.ctxStatic.scale(this.smoothZoom, this.smoothZoom);
         }
 
         // dynamic
@@ -733,6 +737,9 @@ export class CanvasController {
         const camAABB = camGlobalAABB(this.smoothCameraPos, this.dynamicCanvas.width, this.dynamicCanvas.height, this.smoothZoom);
 
         let needDynamicAgain = false;
+
+
+
 
         // process each layer
         for (let layer = 0; layer < this.maxLayers; layer++) {
