@@ -12,14 +12,14 @@ export function smoothstep(a:number, b:number, t:number){
  * convert point from global space to screen space.
  */
 export function toScreenSpace(point: Vector2, camPos: Vector2, scale: number) {
-    return point.mul(scale).sub(camPos); // cam pos is not affected by scale
+    return point.sub(camPos).mul(scale); // cam pos is not affected by scale
 }
 
 /**
  * convert from screen space to global space
  */
 export function toGlobalSpace(point: Vector2, camPos: Vector2, scale: number) {
-    return point.add(camPos).div(scale); // reverse operations done in toScreenSpace()
+    return point.div(scale).add(camPos); // reverse operations done in toScreenSpace()
 }
 
 /**
@@ -47,6 +47,13 @@ export class Vector2 {
         return new Vector2(
             lerp(v1.x, v2.x, t),
             lerp(v1.y, v2.y, t)
+        );
+    }
+
+    static smoothstep(v1:Vector2, v2:Vector2, t:number){
+        return new Vector2(
+            smoothstep(v1.x, v2.x, t),
+            smoothstep(v1.y, v2.y, t)
         );
     }
 
@@ -133,6 +140,10 @@ export class Vector2 {
 
     sub(other: Vector2) {
         return new Vector2(this.x - other.x, this.y - other.y);
+    }
+
+    subp(x:number, y:number){
+        return new Vector2(this.x - x, this.y - y);
     }
 
 

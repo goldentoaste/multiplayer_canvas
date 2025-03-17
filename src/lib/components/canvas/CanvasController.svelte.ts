@@ -222,7 +222,7 @@ export class CanvasController {
 
     cameraPos: Vector2; // used for logic
     smoothCameraPos: Vector2; // used for rendering only
-    zoom: number = 1;
+    zoom: number = 1.25;
     smoothZoom: number = 1; // for rendering
 
     maxLayers: number;
@@ -347,22 +347,45 @@ export class CanvasController {
 
 
     updateSmoothPos() {
-        const smoothFactor = 0.1;
-        this.smoothCameraPos = Vector2.lerp(this.smoothCameraPos, this.cameraPos, smoothFactor);
-        this.smoothZoom = smoothstep(this.smoothZoom, this.zoom, 0.15);
+        const smoothFactor = 0.2;
+        this.smoothCameraPos = Vector2.smoothstep(this.smoothCameraPos, this.cameraPos, smoothFactor);
+        this.smoothZoom = smoothstep(this.smoothZoom, this.zoom, smoothFactor);
 
         // always render smooth movement isn't done yet.
         if (this.smoothCameraPos.distTo(this.cameraPos) > 0.1 || Math.abs(this.smoothZoom - this.zoom) > 0.0001) {
             this.needDynamicRender = true;
             this.needStaticRender = true;
-            console.log("??");
             
+
         }
     }
 
     // ============ End Render loop ============
 
 
+    zoomAtPoint(point: Vector2, newZoom: number) {
+        console.log("oringal", point, this.cameraPos);
+        
+        if (newZoom > 2 || newZoom < 0.5) {
+            return;
+        }
+        // assuming point is cursor location
+
+
+        point = toGlobalSpace(point, this.cameraPos, this.zoom);
+        const diff = point.sub(this.cameraPos);
+console.log(diff , point);
+
+// return
+        
+        this.cameraPos = point.sub(new Vector2(diff.x * newZoom, diff.y * newZoom));
+
+
+        this.zoom = newZoom;
+
+        this.needStaticRender = true;
+        this.needDynamicRender = true;
+    }
 
     // ============ events ============
 
@@ -372,13 +395,10 @@ export class CanvasController {
         this.dynamicCanvas.addEventListener("keyup", (e) => {
 
             if (e.key == "=") {
-                this.zoom = Math.min(2, this.zoom + 0.2);
-                this.needStaticRender = true;
-
+                this.zoomAtPoint(this.lastPos!, this.zoom + 0.2);
             }
             else if (e.key == "-") {
-                this.zoom = Math.max(0.5, this.zoom - 0.2);
-                this.needStaticRender = true;
+                this.zoomAtPoint(this.lastPos!, this.zoom - 0.2);
             }
 
         })
@@ -407,6 +427,7 @@ export class CanvasController {
             } else if (e.buttons === 2) {
                 this.mousepan(event)
             }
+            this.lastPos = new Vector2(event.x, event.y);
         })
 
         this.dynamicCanvas.addEventListener("mouseup", (e) => {
@@ -614,7 +635,7 @@ export class CanvasController {
     }
 
     mousepan(e: SimplePointerEvent) {
-        const diff = new Vector2(e.dx, e.dy).div(this.zoom); // scale cam pos speed by zoom level
+        const diff = new Vector2(e.dx, e.dy); // scale cam pos speed by zoom level
         this.cameraPos = this.cameraPos.sub(diff);
 
         if (this.selfCursor) {
@@ -681,7 +702,6 @@ export class CanvasController {
             this.selfCursor.pos = new Vector2(e.x, e.y);
         }
 
-
         this.currentLine.appendPoint(toGlobalSpace(new Vector2(e.x, e.y), this.cameraPos, this.zoom));
         this.dynamicLines[this.currentLine.layer].set(this.currentLine.id, this.currentLine);
         this.needDynamicRender = true;
@@ -721,25 +741,22 @@ export class CanvasController {
         if (this.needStaticRender) {
             this.ctxStatic.resetTransform();
             this.ctxStatic.clearRect(0, 0, this.staticCanvas.width, this.staticCanvas.height);
-            this.ctxStatic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
             this.ctxStatic.scale(this.smoothZoom, this.smoothZoom);
+            this.ctxStatic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
         }
 
         // dynamic
         if (this.needDynamicRender) {
             this.ctxDynamic.resetTransform();
             this.ctxDynamic.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height);
-            this.ctxDynamic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
             this.ctxDynamic.scale(this.smoothZoom, this.smoothZoom);
+            this.ctxDynamic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
         }
 
         // optimization, don't render lines outside of view port
         const camAABB = camGlobalAABB(this.smoothCameraPos, this.dynamicCanvas.width, this.dynamicCanvas.height, this.smoothZoom);
 
         let needDynamicAgain = false;
-
-
-
 
         // process each layer
         for (let layer = 0; layer < this.maxLayers; layer++) {
