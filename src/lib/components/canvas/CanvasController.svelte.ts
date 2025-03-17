@@ -1,25 +1,38 @@
 import { CanvasFirebaseController } from "$lib/firebase/CanvasFirebaseController";
 import { joinSpace } from "$lib/realtime/space.svelte";
-import { AABB, camGlobalAABB, lerp, pointDistanceToLineSegment, smoothstep, toGlobalSpace, toScreenSpace, Vector2 } from "$lib/Vector2";
+import {
+    AABB,
+    camGlobalAABB,
+    lerp,
+    pointDistanceToLineSegment,
+    smoothstep,
+    toGlobalSpace,
+    toScreenSpace,
+    Vector2,
+} from "$lib/Vector2";
 import type { CursorData, CursorUpdate } from "@ably/spaces";
 import { untrack } from "svelte";
 
 export interface UserData {
-    username: string,
-    color: string,
-    penInfo: PenInfo
+    username: string;
+    color: string;
+    penInfo: PenInfo;
 }
 
 export interface PenInfo {
-    penColor: string,
-    penThickness: number,
-    layer: number,
-    smoothing: boolean,
-    name?: string
+    penColor: string;
+    penThickness: number;
+    layer: number;
+    smoothing: boolean;
+    name?: string;
 }
 
 export interface SerializedLineType {
-    id: string, thickness: number, color: string, points: [number, number][], layer: number
+    id: string;
+    thickness: number;
+    color: string;
+    points: [number, number][];
+    layer: number;
 }
 export class Line {
     id: string;
@@ -42,23 +55,22 @@ export class Line {
 
     /**
      * ctx should have already been translated to account for camera, before calling this render
-     * 
-     * NOTE: 
+     *
+     * NOTE:
      * For global rendering (canvas as big as the world), move ctx to world origin
      * For local rendering (canvas is camera viewport), ctx should be moved to negate camera position
      * This way, line render code can just use global coordinates and thus reuse code.
-     * @param ctx 
+     * @param ctx
      */
     render(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D) {
         if (this.points.length < 2) {
             return; // no points to render
         }
 
-
         ctx.strokeStyle = this.color;
         ctx.lineWidth = this.thickness;
         ctx.lineCap = "round";
-        ctx.lineJoin = 'round'
+        ctx.lineJoin = "round";
 
         ctx.beginPath();
         ctx.moveTo(this.points[0].x, this.points[0].y);
@@ -69,7 +81,6 @@ export class Line {
 
         ctx.stroke(); // done!
 
-
         // for drawing debug AABB
         // if(this.aabb){
         //     ctx.lineWidth = 3;
@@ -78,10 +89,9 @@ export class Line {
         // }
     }
 
-
     /**
      * remove points that are epsilon within each other
-     * @param epsilon 
+     * @param epsilon
      */
     pointsCulling(epsilon: number, smoothRange: number, smooth: boolean) {
         for (let i = this.points.length - 1; i > 0; i--) {
@@ -110,7 +120,6 @@ export class Line {
                 this.aabb.expandToContain(this.points[i]);
             }
         }
-
     }
 
     serialize() {
@@ -119,13 +128,17 @@ export class Line {
             thickness: this.thickness,
             color: this.color,
             layer: this.layer,
-            points: this.points.map(item => item.toArr())
-        } as SerializedLineType
+            points: this.points.map((item) => item.toArr()),
+        } as SerializedLineType;
     }
 
     static deserialize(obj: SerializedLineType, makeAABB = false) {
         const line = new Line(
-            obj.id, obj.thickness, obj.color, obj.layer, obj.points.map(item => Vector2.fromArr(item))
+            obj.id,
+            obj.thickness,
+            obj.color,
+            obj.layer,
+            obj.points.map((item) => Vector2.fromArr(item)),
         );
 
         if (makeAABB) {
@@ -145,17 +158,14 @@ export class Line {
         // expand aabb to fit line thickness, extra margin to be generous
         this.aabb.nudgeTopLeftp(-this.thickness * 1, -this.thickness * 1);
         this.aabb.nudgeBotRightp(this.thickness * 1, this.thickness * 1);
-
     }
-
 
     /**
      * returns true if p is colliding with this line, ie
      * distance of p to line is less thickness
-     * @param p 
+     * @param p
      */
     pointCollision(p0: Vector2) {
-
         if (this.aabb && !this.aabb.containsPoint(p0)) {
             return false;
         }
@@ -173,7 +183,6 @@ export class Line {
             // point dist to line is less than limit
             // also check that p0 is sorta "between" the line segment points.
             if (d1 || d2 || (t && d1 && d2)) {
-
                 return true;
             }
             prev = this.points[i];
@@ -181,10 +190,6 @@ export class Line {
 
         return false;
     }
-
-
-
-
 }
 
 /**
@@ -214,15 +219,13 @@ interface SimplePointerEvent {
     buttons: number;
 }
 
-
 export class CanvasController {
-
     staticCanvas: HTMLCanvasElement;
     dynamicCanvas: HTMLCanvasElement;
 
     cameraPos: Vector2; // used for logic
     smoothCameraPos: Vector2; // used for rendering only
-    zoom: number = 2;
+    zoom: number = 1;
     smoothZoom: number = 1; // for rendering
 
     maxLayers: number;
@@ -233,11 +236,9 @@ export class CanvasController {
     ctxDynamic: CanvasRenderingContext2D;
 
     needStaticRender = true;
-    needDynamicRender = true; // boolean flag to indicate if either needs rerendering
 
     selfCursor: Cursor | undefined = $state(undefined); // Cursor is a primitive obj, so should be deeply reactive by Svelte
     othersCursors: { [clientId: string]: Cursor } = $state({});
-
 
     space: Awaited<ReturnType<typeof joinSpace>> | undefined = $state();
     userdata: UserData | undefined = $state();
@@ -274,7 +275,6 @@ export class CanvasController {
         this.ctxDynamic = this.dynamicCanvas.getContext("2d")!;
 
         $effect(() => {
-
             if (this.space && this.userdata) {
                 this.space.updateProfile(this.userdata.username, this.userdata.color);
             }
@@ -283,24 +283,20 @@ export class CanvasController {
                 untrack(() => {
                     this.selfCursor!.username = this.userdata?.username;
                     this.selfCursor!.color = this.userdata?.color ?? "red";
-
-                })
-
+                });
             }
-        })
+        });
 
         this.firebaseController = new CanvasFirebaseController();
-
 
         this.startStorage();
         this.initEvents();
         this.startRealTime();
         this.startRender();
 
-
         setInterval(() => {
             this.deletedLines.clear();
-        }, 10000)
+        }, 10000);
     }
 
     // ============ Render loop ============
@@ -317,7 +313,7 @@ export class CanvasController {
         this.render(); // checks and redners both static and dynamic lines
 
         // do things
-        requestAnimationFrame(this.eventLoop.bind(this))
+        requestAnimationFrame(this.eventLoop.bind(this));
     }
 
     updateDeltaTime(t: number) {
@@ -329,10 +325,9 @@ export class CanvasController {
 
     finalizeDeletedLines() {
         if (this.deltaTime >= this.cursorUpdateThreshold) {
-
             if (this.toDelete.length > 0) {
                 // broadcast results
-                this.space?.deleteLines(this.toDelete.map(item => item.id));
+                this.space?.deleteLines(this.toDelete.map((item) => item.id));
             }
 
             for (const line of this.toDelete) {
@@ -344,8 +339,6 @@ export class CanvasController {
         }
     }
 
-
-
     updateSmoothPos() {
         const smoothFactor = 0.2;
         this.smoothCameraPos = Vector2.smoothstep(this.smoothCameraPos, this.cameraPos, smoothFactor);
@@ -353,25 +346,20 @@ export class CanvasController {
 
         // always render smooth movement isn't done yet.
         if (this.smoothCameraPos.distTo(this.cameraPos) > 0.1 || Math.abs(this.smoothZoom - this.zoom) > 0.0001) {
-            this.needDynamicRender = true;
             this.needStaticRender = true;
-
-
         }
     }
 
     // ============ End Render loop ============
 
-
     zoomAtPoint(point: Vector2, newZoom: number) {
-
         if (newZoom > 2 || newZoom < 0.5) {
             return;
         }
         // assuming point is cursor location
 
-        const x = point.x ;
-        const y = point.y ;
+        const x = point.x;
+        const y = point.y;
 
         point = toGlobalSpace(point, this.cameraPos, this.zoom);
         this.cameraPos = point.sub(new Vector2(x / newZoom, y / newZoom));
@@ -379,7 +367,6 @@ export class CanvasController {
         this.zoom = newZoom;
 
         this.needStaticRender = true;
-        this.needDynamicRender = true;
     }
 
     // ============ events ============
@@ -388,16 +375,12 @@ export class CanvasController {
     initialTouchDist = 0;
     initEvents() {
         this.dynamicCanvas.addEventListener("keyup", (e) => {
-
             if (e.key == "=") {
                 this.zoomAtPoint(this.lastPos!, this.zoom + 0.2);
-            }
-            else if (e.key == "-") {
+            } else if (e.key == "-") {
                 this.zoomAtPoint(this.lastPos!, this.zoom - 0.2);
             }
-
-        })
-
+        });
 
         this.dynamicCanvas.addEventListener("mousemove", (e) => {
             const event: SimplePointerEvent = {
@@ -407,23 +390,22 @@ export class CanvasController {
                 dx: e.movementX,
                 dy: e.movementY,
 
-                buttons: e.buttons
-            }
+                buttons: e.buttons,
+            };
 
             if (e.buttons === 0) {
                 this.mouseHover(event);
-            }
-            else if (e.buttons === 1) {
+            } else if (e.buttons === 1) {
                 if (!this.userdata?.penInfo.name) {
-                    this.mousepan(event)
+                    this.mousepan(event);
                 } else {
                     this.mouseDrag(event);
                 }
             } else if (e.buttons === 2) {
-                this.mousepan(event)
+                this.mousepan(event);
             }
             this.lastPos = new Vector2(event.x, event.y);
-        })
+        });
 
         this.dynamicCanvas.addEventListener("mouseup", (e) => {
             const event: SimplePointerEvent = {
@@ -433,12 +415,10 @@ export class CanvasController {
                 dx: e.movementX,
                 dy: e.movementY,
 
-                buttons: e.buttons
-            }
+                buttons: e.buttons,
+            };
             this.mouseup(event);
         });
-
-
 
         // touch related
         this.dynamicCanvas.addEventListener("touchstart", (e) => {
@@ -446,21 +426,17 @@ export class CanvasController {
 
             if (e.touches.length == 1) {
                 const t = e.touches[0];
-                this.lastPos = new Vector2(t.clientX - rect.left, t.clientY - rect.top)
-            }
-
-            else if (e.touches.length == 2) {
+                this.lastPos = new Vector2(t.clientX - rect.left, t.clientY - rect.top);
+            } else if (e.touches.length == 2) {
                 const t1 = e.touches[0];
                 const t2 = e.touches[1];
 
                 const v1 = new Vector2(t1.clientX - rect.left, t1.clientY - rect.top);
                 const v2 = new Vector2(t2.clientX - rect.left, t2.clientY - rect.top);
-                this.lastPos = Vector2.midPoint(v1, v2)
+                this.lastPos = Vector2.midPoint(v1, v2);
                 this.initialTouchDist = v1.distTo(v2);
-
             }
-        })
-
+        });
 
         this.dynamicCanvas.addEventListener("touchmove", (e) => {
             e.preventDefault();
@@ -484,13 +460,12 @@ export class CanvasController {
                     dx: -1,
                     dy: -1,
                     x: _x,
-                    y: _y
-                }
+                    y: _y,
+                };
                 this.mouseDrag(event);
 
                 this.lastPos = new Vector2(_x, _y);
-            }
-            else if (e.touches.length == 2) {
+            } else if (e.touches.length == 2) {
                 const t1 = e.touches[0];
                 const t2 = e.touches[1];
                 const v1 = new Vector2(t1.clientX - rect.left, t1.clientY - rect.top);
@@ -507,12 +482,11 @@ export class CanvasController {
                     dy: diff.y,
                     x: currentPos.x,
                     y: currentPos.y,
-                }
+                };
 
                 this.mousepan(event);
             }
-
-        })
+        });
 
         this.dynamicCanvas.addEventListener("touchend", (e) => {
             if (e.touches.length == 0) {
@@ -521,16 +495,14 @@ export class CanvasController {
                     y: 0,
                     buttons: -1,
                     dx: 0,
-                    dy: 0
-                })
+                    dy: 0,
+                });
                 // clean up
                 this.lastPos = undefined;
                 this.initialTouchDist = 0;
             }
-
-        })
+        });
     }
-
 
     async startStorage() {
         const lines = await this.firebaseController.fullFetch();
@@ -549,7 +521,7 @@ export class CanvasController {
             return;
         }
 
-        const user = e.data.user as { id: string, username: string, color: string };
+        const user = e.data.user as { id: string; username: string; color: string };
 
         if (user.id === this.selfCursor?.id) {
             return; // ignore own data to avoid overhead
@@ -559,23 +531,18 @@ export class CanvasController {
 
         this.othersCursors[user.id] = {
             ...user,
-            pos: toScreenSpace(new Vector2(e.position.x, e.position.y), this.cameraPos, this.zoom)
-        }
+            pos: toScreenSpace(new Vector2(e.position.x, e.position.y), this.cameraPos, this.zoom),
+        };
 
         this.othersCursors = this.othersCursors;
 
         if (currentLine) {
-
             if (!this.deletedLines.has(currentLine.id)) {
-                this.dynamicLines[currentLine.layer].set(user.id, Line.deserialize(currentLine));
-            }
-            else {
-                this.dynamicLines[currentLine.layer].delete(user.id);
+                this.dynamicLines[currentLine.layer].set(currentLine.id, Line.deserialize(currentLine));
+            } else {
+                this.dynamicLines[currentLine.layer].delete(currentLine.id);
             }
         }
-
-        this.needDynamicRender = true;
-
     }
 
     handleDeletes(idsToDelete: string[]) {
@@ -596,23 +563,17 @@ export class CanvasController {
         this.deletedLines.add(newLine.id);
     }
 
-
     startRealTime() {
-        joinSpace(undefined,
+        joinSpace(
+            undefined,
             this.handleCursorUpdate.bind(this),
             this.handleDeletes.bind(this),
-            this.handleNewLine.bind(this)
+            this.handleNewLine.bind(this),
         ).then((space) => {
             this.space = space;
-            this.selfCursor = new Cursor(this.space.user.id,
-                this.space.user.color,
-                undefined,
-                Vector2.ZERO)
-        })
+            this.selfCursor = new Cursor(this.space.user.id, this.space.user.color, undefined, Vector2.ZERO);
+        });
     }
-
-
-
 
     uploadCursorInfo(e: SimplePointerEvent, force = false) {
         if (!this.space || !this.selfCursor) {
@@ -621,11 +582,16 @@ export class CanvasController {
 
         if (force || this.deltaTime > this.cursorUpdateThreshold) {
             const gp = toGlobalSpace(new Vector2(e.x, e.y), this.cameraPos, this.zoom);
-            this.space.updateCursor(gp.x, gp.y, {
-                username: this.userdata?.username,
-                color: this.selfCursor.color,
-                id: this.selfCursor.id
-            }, this.currentLine?.serialize());
+            this.space.updateCursor(
+                gp.x,
+                gp.y,
+                {
+                    username: this.userdata?.username,
+                    color: this.selfCursor.color,
+                    id: this.selfCursor.id,
+                },
+                this.currentLine?.serialize(),
+            );
         }
     }
 
@@ -636,9 +602,8 @@ export class CanvasController {
         if (this.selfCursor) {
             this.selfCursor.pos = this.selfCursor?.pos.addp(e.dx, e.dy);
         }
-        Object.values(this.othersCursors).forEach(item => item.pos = item.pos.add(diff));
+        Object.values(this.othersCursors).forEach((item) => (item.pos = item.pos.add(diff)));
 
-        this.needDynamicRender = true;
         this.needStaticRender = true;
     }
 
@@ -657,15 +622,12 @@ export class CanvasController {
         // broadcast new line to other realtime clients
         this.space?.newLine(line.serialize());
 
-
         // queue the item to be uploaded
         this.firebaseController.additionQueue.push(this.currentLine);
 
         // clean up
         this.currentLine = undefined;
         this.needStaticRender = true;
-        this.needDynamicRender = true;
-        // TODO upload results to perm storage
     }
 
     mouseHover(e: SimplePointerEvent) {
@@ -674,7 +636,6 @@ export class CanvasController {
         }
         this.uploadCursorInfo(e);
     }
-
 
     mouseDrag(e: SimplePointerEvent) {
         // TODO color and thickness modifier
@@ -690,7 +651,13 @@ export class CanvasController {
         }
 
         if (!this.currentLine) {
-            this.currentLine = new Line(crypto.randomUUID(), this.userdata?.penInfo.penThickness ?? 4, this.userdata?.penInfo.penColor ?? "black", this.userdata?.penInfo.layer ?? 0, []);
+            this.currentLine = new Line(
+                crypto.randomUUID(),
+                this.userdata?.penInfo.penThickness ?? 4,
+                this.userdata?.penInfo.penColor ?? "black",
+                this.userdata?.penInfo.layer ?? 0,
+                [],
+            );
         }
 
         if (this.selfCursor) {
@@ -699,19 +666,15 @@ export class CanvasController {
 
         this.currentLine.appendPoint(toGlobalSpace(new Vector2(e.x, e.y), this.cameraPos, this.zoom));
         this.dynamicLines[this.currentLine.layer].set(this.currentLine.id, this.currentLine);
-        this.needDynamicRender = true;
 
         this.uploadCursorInfo(e);
-
     }
-
 
     deleteCollidedLines(p: Vector2) {
         for (const layer of this.staticLines) {
             for (const line of layer.values()) {
                 if (line.pointCollision(p)) {
                     this.toDelete.push(line);
-
                 }
             }
         }
@@ -723,7 +686,6 @@ export class CanvasController {
         if (this.toDelete.length > 0) {
             this.needStaticRender = true;
         }
-
     }
 
     // ============ end events ============
@@ -740,18 +702,20 @@ export class CanvasController {
             this.ctxStatic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
         }
 
-        // dynamic
-        if (this.needDynamicRender) {
-            this.ctxDynamic.resetTransform();
-            this.ctxDynamic.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height);
-            this.ctxDynamic.scale(this.smoothZoom, this.smoothZoom);
-            this.ctxDynamic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
-        }
+        // dynamic (always)
+
+        this.ctxDynamic.resetTransform();
+        this.ctxDynamic.clearRect(0, 0, this.dynamicCanvas.width, this.dynamicCanvas.height);
+        this.ctxDynamic.scale(this.smoothZoom, this.smoothZoom);
+        this.ctxDynamic.translate(-this.smoothCameraPos.x, -this.smoothCameraPos.y);
 
         // optimization, don't render lines outside of view port
-        const camAABB = camGlobalAABB(this.smoothCameraPos, this.dynamicCanvas.width, this.dynamicCanvas.height, this.smoothZoom);
-
-        let needDynamicAgain = false;
+        const camAABB = camGlobalAABB(
+            this.smoothCameraPos,
+            this.dynamicCanvas.width,
+            this.dynamicCanvas.height,
+            this.smoothZoom,
+        );
 
         // process each layer
         for (let layer = 0; layer < this.maxLayers; layer++) {
@@ -764,30 +728,21 @@ export class CanvasController {
                 }
             }
 
-            if (this.needDynamicRender) {
-                for (const [id, line] of this.dynamicLines[layer].entries()) {
-                    line.render(this.ctxDynamic);
+            for (const [id, line] of this.dynamicLines[layer].entries()) {
+                line.render(this.ctxDynamic);
 
-                    if (this.deletedLines.has(line.id)) {
-                        needDynamicAgain = true;
-                        this.dynamicLines[layer].delete(id)
-                    }
+                if (this.deletedLines.has(line.id)) {
+                    this.dynamicLines[layer].delete(id);
                 }
-
             }
-
         }
 
         // done
-        this.needDynamicRender = false || needDynamicAgain;
 
         this.needStaticRender = false;
-
     }
-
 
     cleanup() {
         this.space?.unsubscribe();
     }
-
 }
