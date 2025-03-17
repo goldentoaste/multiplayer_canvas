@@ -222,7 +222,7 @@ export class CanvasController {
 
     cameraPos: Vector2; // used for logic
     smoothCameraPos: Vector2; // used for rendering only
-    zoom: number = 1.25;
+    zoom: number = 2;
     smoothZoom: number = 1; // for rendering
 
     maxLayers: number;
@@ -355,7 +355,7 @@ export class CanvasController {
         if (this.smoothCameraPos.distTo(this.cameraPos) > 0.1 || Math.abs(this.smoothZoom - this.zoom) > 0.0001) {
             this.needDynamicRender = true;
             this.needStaticRender = true;
-            
+
 
         }
     }
@@ -364,22 +364,17 @@ export class CanvasController {
 
 
     zoomAtPoint(point: Vector2, newZoom: number) {
-        console.log("oringal", point, this.cameraPos);
-        
+
         if (newZoom > 2 || newZoom < 0.5) {
             return;
         }
         // assuming point is cursor location
 
+        const x = point.x ;
+        const y = point.y ;
 
         point = toGlobalSpace(point, this.cameraPos, this.zoom);
-        const diff = point.sub(this.cameraPos);
-console.log(diff , point);
-
-// return
-        
-        this.cameraPos = point.sub(new Vector2(diff.x * newZoom, diff.y * newZoom));
-
+        this.cameraPos = point.sub(new Vector2(x / newZoom, y / newZoom));
 
         this.zoom = newZoom;
 
@@ -635,11 +630,11 @@ console.log(diff , point);
     }
 
     mousepan(e: SimplePointerEvent) {
-        const diff = new Vector2(e.dx, e.dy); // scale cam pos speed by zoom level
+        const diff = new Vector2(e.dx, e.dy).div(this.zoom); // scale cam pos speed by zoom level
         this.cameraPos = this.cameraPos.sub(diff);
 
         if (this.selfCursor) {
-            this.selfCursor.pos = this.selfCursor?.pos.add(diff);
+            this.selfCursor.pos = this.selfCursor?.pos.addp(e.dx, e.dy);
         }
         Object.values(this.othersCursors).forEach(item => item.pos = item.pos.add(diff));
 
