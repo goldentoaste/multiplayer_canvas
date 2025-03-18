@@ -318,13 +318,13 @@ export class CanvasController {
 
     updateDeltaTime(t: number) {
         this.deltaTime = t - this.lastFrameTime;
-        if (this.deltaTime > this.cursorUpdateThreshold) {
-            this.lastFrameTime = t;
-        }
+        this.lastFrameTime = t;
     }
 
+
+    lastCursorUpdate = 0;
     finalizeDeletedLines() {
-        if (this.deltaTime >= this.cursorUpdateThreshold) {
+        if (this.lastCursorUpdate >= this.cursorUpdateThreshold) {
             if (this.toDelete.length > 0) {
                 // broadcast results
                 this.space?.deleteLines(this.toDelete.map((item) => item.id));
@@ -340,9 +340,10 @@ export class CanvasController {
     }
 
     updateSmoothPos() {
-        const smoothFactor = 0.2;
-        this.smoothCameraPos = Vector2.smoothstep(this.smoothCameraPos, this.cameraPos, smoothFactor);
-        this.smoothZoom = smoothstep(this.smoothZoom, this.zoom, smoothFactor);
+       
+        const smoothFactor = 35;
+        this.smoothCameraPos = Vector2.smoothstep(this.smoothCameraPos, this.cameraPos, smoothFactor* this.deltaTime / 1000 );
+        this.smoothZoom = smoothstep(this.smoothZoom, this.zoom, smoothFactor * this.deltaTime / 1000  );
 
         // always render smooth movement isn't done yet.
         if (this.smoothCameraPos.distTo(this.cameraPos) > 0.1 || Math.abs(this.smoothZoom - this.zoom) > 0.0001) {
@@ -585,7 +586,7 @@ export class CanvasController {
             return;
         }
 
-        if (force || this.deltaTime > this.cursorUpdateThreshold) {
+        if (force || this.lastCursorUpdate > this.cursorUpdateThreshold) {
             const gp = toGlobalSpace(new Vector2(e.x, e.y), this.cameraPos, this.zoom);
             this.space.updateCursor(
                 gp.x,
@@ -597,7 +598,10 @@ export class CanvasController {
                 },
                 this.currentLine?.serialize(),
             );
+            this.lastCursorUpdate = 0;
         }
+        this.lastCursorUpdate += this.deltaTime;
+        
     }
 
     mousepan(e: SimplePointerEvent) {
