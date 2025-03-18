@@ -373,6 +373,7 @@ export class CanvasController {
 
     lastPos: Vector2 | undefined;
     initialTouchDist = 0;
+    initialZoom = 0;
     initEvents() {
         this.dynamicCanvas.addEventListener("keyup", (e) => {
             if (e.key == "=") {
@@ -435,7 +436,9 @@ export class CanvasController {
                 const v2 = new Vector2(t2.clientX - rect.left, t2.clientY - rect.top);
                 this.lastPos = Vector2.midPoint(v1, v2);
                 this.initialTouchDist = v1.distTo(v2);
+                this.initialZoom = this.zoom;
             }
+
         });
 
         this.dynamicCanvas.addEventListener("touchmove", (e) => {
@@ -470,8 +473,9 @@ export class CanvasController {
                 const t2 = e.touches[1];
                 const v1 = new Vector2(t1.clientX - rect.left, t1.clientY - rect.top);
                 const v2 = new Vector2(t2.clientX - rect.left, t2.clientY - rect.top);
-
+                const newDist = v1.distTo(v2);
                 const currentPos = Vector2.midPoint(v1, v2);
+                this.zoomAtPoint(currentPos, (newDist / this.initialTouchDist) * this.initialZoom);
                 const diff = currentPos.sub(this.lastPos);
 
                 this.lastPos = currentPos;
@@ -500,6 +504,7 @@ export class CanvasController {
                 // clean up
                 this.lastPos = undefined;
                 this.initialTouchDist = 0;
+                this.initialZoom = 0;
             }
         });
     }
