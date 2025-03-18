@@ -61,9 +61,9 @@
 <h3>Desktop</h3>
 <ul>
     <li>Choose your *username*, *cursor color*, and pen options</li>
-
     <li>Click and drag to draw</li>
     <li>Right click to Pan</li>
+    <li>"+" and "-" key to zoom</li>
 </ul>
 
 <h3>Mobile</h3>
