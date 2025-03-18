@@ -57,14 +57,20 @@
 </div>
 
 <p>Some instructions</p>
+
+<h3>Desktop</h3>
 <ul>
-    <li>Choose your *username*, *cursor color*, *pen thickness* and *pen color*</li>
+    <li>Choose your *username*, *cursor color*, and pen options</li>
 
     <li>Click and drag to draw</li>
-    <li>!! Middle mouse to PAN</li>
+    <li>Right click to Pan</li>
+</ul>
 
-    <li>Mobile: 1 finger to draw</li>
-    <li>Mobile 2 fingers to *pan*!</li>
+<h3>Mobile</h3>
+<ul>
+    <li>1 finger to draw</li>
+    <li>2 finger to pan</li>
+    <li>Pinch to zoom</li>
 </ul>
 
 <style>
